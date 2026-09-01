@@ -35,7 +35,7 @@ de la izquierda por si se usa con otro tipo de camión.
 - El tercer número es la altura del pallet.
 - La letra final indica cómo se puede apilar:
   - **U — único**: no se puede poner un pallet encima de otro. Siempre 1 nivel.
-  - **R — remontable**: se pueden apilar pallets uno encima de otro hasta donde
+  - **D — remontable**: se pueden apilar pallets uno encima de otro hasta donde
     llegue la altura útil del camión (2,70 m por defecto). Ej.: un pallet de
     1,00 m de alto permite 2 niveles (2,00 m ≤ 2,70 m), pero no 3 (3,00 m > 2,70 m).
   - **P — pirámide**: se apilan en base de N pallets uno junto a otro, con
@@ -56,7 +56,7 @@ Para cada medida + cantidad del pedido:
 2. Para cada orientación, se calcula cuántos pallets caben en una fila a lo
    ancho del camión (`N = ancho útil del camión ÷ ancho del pallet`, redondeado
    hacia abajo).
-3. Según el tipo (U/R/P) se calcula cuántos pallets caben en total en esa fila
+3. Según el tipo (U/D/P) se calcula cuántos pallets caben en total en esa fila
    considerando el apilado en altura (ver arriba).
 4. Se calcula cuántas filas (`slots`) hacen falta para la cantidad pedida, y el
    largo de camión que ocupan esas filas (`filas × largo de esa orientación`).

@@ -51,9 +51,9 @@ function approx(a, b, msg) {
   approx(r.best.length, 1.60, '6 pallets piramide -> mejor orientación da 1.60m');
 }
 
-// --- R: mismas medidas pero remontable -> 3 base + 3 encima = 6 por fila ---
+// --- D: mismas medidas pero remontable -> 3 base + 3 encima = 6 por fila ---
 {
-  const r = computeLineResult('0,80x1,20x1,00xR', 6, truck);
+  const r = computeLineResult('0,80x1,20x1,00xD', 6, truck);
   assert.strictEqual(r.best.N, 3);
   assert.strictEqual(r.best.levels, 2);
   assert.strictEqual(r.best.perSlot, 6);

@@ -1,5 +1,5 @@
 // Lógica de cálculo de metros lineales de camión ocupados por pallets.
-// Ver README.md para las reglas de negocio (orientación, apilado R/U/P).
+// Ver README.md para las reglas de negocio (orientación, apilado U/D/P).
 
 const EPS = 1e-9;
 
@@ -31,8 +31,8 @@ function parsePalletCode(code) {
   const height = toMeters(rawH);
   const type = rawType.trim().toUpperCase();
 
-  if (!['R', 'U', 'P'].includes(type)) {
-    throw new Error(`Tipo de apilado desconocido "${rawType}": debe ser R, U o P`);
+  if (!['U', 'D', 'P'].includes(type)) {
+    throw new Error(`Tipo de apilado desconocido "${rawType}": debe ser U, D o P`);
   }
   if (!(dimA > 0) || !(dimB > 0) || !(height > 0)) {
     throw new Error(`Medidas inválidas en "${code}"`);
@@ -60,12 +60,12 @@ function stackingForOrientation({ height, type }, N, truckHeight) {
     return { perSlot: N, levels: 1, description: `${N} pallet(s) en 1 nivel (U: no remontable)` };
   }
 
-  if (type === 'R') {
+  if (type === 'D') {
     const levels = Math.max(1, floorDiv(truckHeight, height));
     return {
       perSlot: N * levels,
       levels,
-      description: `${N} pallet(s) x ${levels} nivel(es) apilado(s) (R: remontable)`,
+      description: `${N} pallet(s) x ${levels} nivel(es) apilado(s) (D: remontable)`,
     };
   }
 
