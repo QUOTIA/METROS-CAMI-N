@@ -93,12 +93,13 @@
   .diagram-panel { margin-top: 16px; }
   .diagram-panel h2 { font-size: 1rem; margin: 0 0 4px; }
   .diagram-panel .diagram-hint { color: var(--muted); font-size: 0.78rem; margin: 0 0 12px; }
-  .diagram-scroll { overflow-x: auto; }
+  .diagram-scroll { overflow-x: auto; text-align: center; }
   .truck-diagram {
     display: block;
     width: 100%;
-    min-width: 520px;
+    max-width: 420px;
     height: auto;
+    margin: 0 auto;
     background: #fbfbfc;
     border-radius: 4px;
   }
@@ -106,7 +107,8 @@
   .pallet-cell { stroke: #ffffff; stroke-width: 1; vector-effect: non-scaling-stroke; }
   .pallet-cell.empty { stroke: var(--border); stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
   .pyramid-top { stroke: #ffffff; stroke-width: 1; vector-effect: non-scaling-stroke; }
-  .cell-badge { font-size: 0.11px; fill: #ffffff; font-weight: 700; }
+  .cell-badge { font-size: 0.1px; fill: #ffffff; font-weight: 700; }
+  .dim-label { font-size: 0.065px; fill: #ffffff; font-weight: 600; opacity: 0.9; }
   .slot-divider { stroke: #ffffff; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: 0.8; }
   .article-divider { stroke: var(--text); stroke-width: 2; vector-effect: non-scaling-stroke; }
   .unused-width {
@@ -164,7 +166,7 @@
 
 <div class="panel diagram-panel">
   <h2>Disposición en el camión</h2>
-  <p class="diagram-hint">Vista en planta (desde arriba). Cada color es un artículo; los recuadros claros discontinuos son hueco de ancho sin usar.</p>
+  <p class="diagram-hint">Vista en planta, camión de arriba (cabecera) a abajo (puertas). Cada color es un artículo/referencia; cada pallet lleva su ancho (borde superior) y su largo (borde lateral) en metros; los recuadros discontinuos son hueco sin usar.</p>
   <div class="diagram-scroll" id="diagramHost"></div>
 </div>
 

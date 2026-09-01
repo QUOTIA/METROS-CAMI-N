@@ -1,5 +1,6 @@
-// Dibuja un esquema en planta (vista desde arriba) de cómo se colocan los
-// pallets de cada artículo a lo largo del camión, usando SVG.
+// Dibuja un esquema en planta de cómo se colocan los pallets de cada
+// artículo a lo largo del camión, usando SVG — girado de forma que el largo
+// del camión corre verticalmente de arriba (cabecera) a abajo (puertas).
 // Recibe el resultado de `packArticles` (calc.js): tramos de largo (bins),
 // cada uno con uno o varios artículos colocados lado a lado a lo ancho.
 // No depende del DOM en su lógica de distribución, solo en el pintado final.
@@ -36,57 +37,83 @@ function el(tag, attrs) {
   return node;
 }
 
-function drawGridSlot(group, slotX, opt, itemsInSlot, color, yOffset) {
+// Anota una celda (pallet) con su ancho (borde superior) y su largo (borde
+// izquierdo, en vertical) para poder verificar a ojo qué medidas suman el total.
+function labelCell(group, x, y, width, lengthDim) {
+  const widthLabel = el('text', {
+    x: x + width / 2, y: y + 0.09,
+    class: 'dim-label', 'text-anchor': 'middle',
+  });
+  widthLabel.textContent = fmtM(width);
+  group.appendChild(widthLabel);
+
+  const lengthLabel = el('text', {
+    x: x + 0.08, y: y + lengthDim / 2,
+    class: 'dim-label',
+    'text-anchor': 'middle',
+    transform: `rotate(-90 ${x + 0.08} ${y + lengthDim / 2})`,
+  });
+  lengthLabel.textContent = fmtM(lengthDim);
+  group.appendChild(lengthLabel);
+}
+
+// slotY: posición a lo largo (vertical) donde empieza esta fila.
+// xOffset: posición a lo ancho (horizontal) donde empieza el carril de este artículo.
+function drawGridSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
   const { N, width, lengthDim, levels } = opt;
   const cols = distributeColumns(N, levels, itemsInSlot);
 
   for (let c = 0; c < N; c++) {
-    const y = yOffset + c * width;
+    const x = xOffset + c * width;
     const filled = cols[c] > 0;
     const rect = el('rect', {
-      x: slotX, y, width: lengthDim, height: width,
+      x, y: slotY, width, height: lengthDim,
       class: filled ? 'pallet-cell' : 'pallet-cell empty',
       fill: filled ? color : 'none',
       'fill-opacity': filled ? (cols[c] / levels) * 0.55 + 0.35 : 0,
     });
     group.appendChild(rect);
 
-    if (filled && levels > 1) {
-      const label = el('text', {
-        x: slotX + lengthDim / 2,
-        y: y + width / 2,
-        class: 'cell-badge',
-        'text-anchor': 'middle',
-        'dominant-baseline': 'middle',
-      });
-      label.textContent = `×${cols[c]}`;
-      group.appendChild(label);
+    if (filled) {
+      labelCell(group, x, slotY, width, lengthDim);
+      if (levels > 1) {
+        const label = el('text', {
+          x: x + width / 2,
+          y: slotY + lengthDim / 2,
+          class: 'cell-badge',
+          'text-anchor': 'middle',
+          'dominant-baseline': 'middle',
+        });
+        label.textContent = `×${cols[c]}`;
+        group.appendChild(label);
+      }
     }
   }
 }
 
-function drawPyramidSlot(group, slotX, opt, itemsInSlot, color, yOffset) {
+function drawPyramidSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
   const { N, width, lengthDim } = opt;
   const baseCount = Math.min(N, itemsInSlot);
   const topCount = Math.min(N - 1, Math.max(0, itemsInSlot - N));
 
   for (let c = 0; c < N; c++) {
-    const y = yOffset + c * width;
+    const x = xOffset + c * width;
     const filled = c < baseCount;
     group.appendChild(el('rect', {
-      x: slotX, y, width: lengthDim, height: width,
+      x, y: slotY, width, height: lengthDim,
       class: filled ? 'pallet-cell' : 'pallet-cell empty',
       fill: filled ? color : 'none',
       'fill-opacity': filled ? 0.55 : 0,
     }));
+    if (filled) labelCell(group, x, slotY, width, lengthDim);
   }
 
-  const topW = lengthDim * 0.6;
-  const topH = width * 0.6;
+  const topW = width * 0.6;
+  const topH = lengthDim * 0.6;
   for (let c = 0; c < N - 1; c++) {
     if (c >= topCount) continue;
-    const y = yOffset + (c + 1) * width - topH / 2;
-    const x = slotX + (lengthDim - topW) / 2;
+    const x = xOffset + (c + 1) * width - topW / 2;
+    const y = slotY + (lengthDim - topH) / 2;
     group.appendChild(el('rect', {
       x, y, width: topW, height: topH,
       class: 'pallet-cell pyramid-top',
@@ -97,35 +124,35 @@ function drawPyramidSlot(group, slotX, opt, itemsInSlot, color, yOffset) {
 }
 
 // Dibuja un artículo (una entrada de `bin.items`) dentro de su carril,
-// ocupando de `xStart` a `xStart + opt.length`; si el tramo (bin) es más
+// ocupando de `yStart` a `yStart + opt.length`; si el tramo (bin) es más
 // largo que lo que este artículo necesita, el resto del carril se marca
 // como hueco sin usar.
-function drawPlacement(svg, placement, xStart, binLength, yOffset, color) {
+function drawPlacement(svg, placement, yStart, binLength, xOffset, color) {
   const group = el('g', {});
   const opt = placement.option;
   let remaining = placement.quantity;
 
   for (let s = 0; s < opt.slots; s++) {
-    const slotX = xStart + s * opt.lengthDim;
+    const slotY = yStart + s * opt.lengthDim;
     const itemsInSlot = Math.min(opt.perSlot, remaining);
     remaining -= itemsInSlot;
 
     if (placement.pallet.type === 'P') {
-      drawPyramidSlot(group, slotX, opt, itemsInSlot, color, yOffset);
+      drawPyramidSlot(group, slotY, opt, itemsInSlot, color, xOffset);
     } else {
-      drawGridSlot(group, slotX, opt, itemsInSlot, color, yOffset);
+      drawGridSlot(group, slotY, opt, itemsInSlot, color, xOffset);
     }
 
     if (s > 0) {
       group.appendChild(el('line', {
-        x1: slotX, x2: slotX, y1: yOffset, y2: yOffset + opt.usedWidth, class: 'slot-divider',
+        x1: xOffset, x2: xOffset + opt.usedWidth, y1: slotY, y2: slotY, class: 'slot-divider',
       }));
     }
   }
 
   if (opt.length < binLength - DIAG_EPS) {
     group.appendChild(el('rect', {
-      x: xStart + opt.length, y: yOffset, width: binLength - opt.length, height: opt.usedWidth,
+      x: xOffset, y: yStart + opt.length, width: opt.usedWidth, height: binLength - opt.length,
       class: 'unused-width',
     }));
   }
@@ -153,32 +180,32 @@ function renderTruckDiagram(container, packResult, truck, orderedIds) {
   orderedIds.forEach((id, i) => colorById.set(id, DIAGRAM_PALETTE[i % DIAGRAM_PALETTE.length]));
 
   const svg = el('svg', {
-    viewBox: `0 0 ${packResult.totalLength} ${truck.width}`,
+    viewBox: `0 0 ${truck.width} ${packResult.totalLength}`,
     class: 'truck-diagram',
-    preserveAspectRatio: 'xMinYMin meet',
+    preserveAspectRatio: 'xMidYMin meet',
   });
   svg.appendChild(el('rect', {
-    x: 0, y: 0, width: packResult.totalLength, height: truck.width, class: 'truck-outline',
+    x: 0, y: 0, width: truck.width, height: packResult.totalLength, class: 'truck-outline',
   }));
 
-  let xCursor = 0;
+  let yCursor = 0;
   packResult.bins.forEach((bin, binIdx) => {
-    let yCursor = 0;
+    let xCursor = 0;
     bin.items.forEach((placement) => {
       const color = colorById.get(placement.id) || DIAGRAM_PALETTE[0];
-      drawPlacement(svg, placement, xCursor, bin.length, yCursor, color);
-      yCursor += placement.option.usedWidth;
+      drawPlacement(svg, placement, yCursor, bin.length, xCursor, color);
+      xCursor += placement.option.usedWidth;
     });
 
-    if (yCursor < truck.width - DIAG_EPS) {
+    if (xCursor < truck.width - DIAG_EPS) {
       svg.appendChild(el('rect', {
-        x: xCursor, y: yCursor, width: bin.length, height: truck.width - yCursor, class: 'unused-width',
+        x: xCursor, y: yCursor, width: truck.width - xCursor, height: bin.length, class: 'unused-width',
       }));
     }
 
-    xCursor += bin.length;
+    yCursor += bin.length;
     if (binIdx < packResult.bins.length - 1) {
-      svg.appendChild(el('line', { x1: xCursor, x2: xCursor, y1: 0, y2: truck.width, class: 'article-divider' }));
+      svg.appendChild(el('line', { x1: 0, x2: truck.width, y1: yCursor, y2: yCursor, class: 'article-divider' }));
     }
   });
 
