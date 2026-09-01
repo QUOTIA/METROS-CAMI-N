@@ -28,12 +28,6 @@ niveles), y las zonas discontinuas marcan hueco de ancho, de pirámide o de
 largo sin usar (cuando un artículo comparte tramo con otro que necesita más
 recorrido, su carril se queda "corto" dentro de ese mismo tramo).
 
-Si dos o más artículos tienen exactamente la misma base (mismo ancho x largo,
-aunque tengan distinta altura o tipo de apilado), la app va más allá y mezcla
-sus pallets dentro de las mismas columnas — puede que en una sola casilla del
-diagrama veas dos colores distintos, uno encima de otro, porque ahí caben
-pallets de dos referencias distintas.
-
 El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
 de la izquierda por si se usa con otro tipo de camión.
 
@@ -108,32 +102,6 @@ juntos si cada uno usa solo 1 columna — aunque eso signifique más filas (más
 largo) para cada uno por separado, el largo combinado (el máximo de los dos)
 puede ser bastante menor que la suma de sus largos por separado.
 
-## Artículos con la misma base (mezcla vertical)
-
-Cuando dos o más artículos comparten EXACTAMENTE la misma base (mismo ancho x
-largo, en cualquier orden; la altura y el tipo de apilado pueden ser
-distintos), la app va un paso más allá de "compartir tramo lado a lado": los
-trata como un único bloque y reparte sus pallets libremente entre:
-
-- Las columnas a lo ancho (hasta N, según la base) — cada columna puede
-  llevar pallets de referencias distintas apiladas una encima de otra,
-  mientras la suma de sus alturas quepa en el camión.
-- Los huecos "nesteados" de tipo pirámide entre columnas (N-1 por fila) — un
-  pallet suelto de cualquiera de las referencias, si no sobresale.
-
-El reparto usa un algoritmo de empaquetado por alturas (First-Fit-Decreasing):
-ordena todos los pallets de mayor a menor altura y va llenando columnas; los
-que quedan sueltos (no completan pareja en ninguna columna) se mandan a los
-huecos de pirámide si hay sitio. Se calcula así el menor número de filas
-posible para colocar todos los pallets de las referencias combinadas. En el
-diagrama, una misma casilla puede mostrar dos colores (dos referencias)
-apiladas — es intencional: significa que ahí caben pallets de ambas.
-
-Esto no es una búsqueda exhaustiva de todas las formas de repartir alturas
-(sería un problema de empaquetado en contenedores, NP-difícil en general),
-pero cubre bien el caso típico de referencias con bases idénticas y alturas
-parecidas.
-
 ## Archivos
 
 - `index.html` — interfaz.
@@ -149,8 +117,8 @@ parecidas.
 - No hay límite de largo total de camión configurado en esta versión — solo se
   calculan y muestran los metros necesarios, sin avisar si superan la longitud
   real de un tráiler.
-- Los tramos combinan como máximo 3 artículos/bloques distintos a la vez (en
-  la práctica, más de 3 pallets distintos rara vez caben juntos a lo ancho de
-  un camión). La búsqueda es exacta hasta 14 artículos/bloques distintos en
-  el pedido; con más, se usa una heurística voraz que no garantiza el óptimo (ver
+- Los tramos combinan como máximo 3 artículos distintos a la vez (en la
+  práctica, más de 3 pallets distintos rara vez caben juntos a lo ancho de un
+  camión). La búsqueda es exacta hasta 14 artículos distintos en el pedido;
+  con más, se usa una heurística voraz que no garantiza el óptimo (ver
   "Cómo se combinan varios artículos en el mismo tramo").
