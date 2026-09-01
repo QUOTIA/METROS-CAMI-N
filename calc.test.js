@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { computeLineResult, parsePalletCode, toMeters } = require('./calc.js');
+const { computeLineResult, packArticles, parsePalletCode, toMeters } = require('./calc.js');
 
 const truck = { width: 2.45, height: 2.70 };
 
@@ -63,6 +63,39 @@ function approx(a, b, msg) {
 // --- pallet que no cabe en el camión ---
 {
   assert.throws(() => computeLineResult('300x300x100xU', 1, truck), /no cabe/);
+}
+
+// --- packArticles: dos artículos que no caben juntos con su ancho "natural",
+// pero sí si uno de los dos usa menos columnas (comparte el hueco libre) ---
+{
+  // A: 080x130x120xD, 8 uds -> natural: 3 a lo ancho (2.40m), 2 filas de 1.30m = 2.60m
+  // B: 138x146x110xD, 14 uds -> natural: 1 a lo ancho (1.46m), 7 filas de 1.38m = 9.66m
+  // Solos y en secuencia: 2.60 + 9.66 = 12.26m.
+  // Combinados: B se queda con su tramo natural (9.66m, usa 1.46m de ancho),
+  // A usa solo 1 columna (0.80m de ancho, cabe en el 0.99m libre) y "cabalga"
+  // dentro del mismo tramo de 9.66m -> total combinado = 9.66m.
+  const items = [
+    { id: 1, name: 'A', code: '080x130x120xD', quantity: 8 },
+    { id: 2, name: 'B', code: '138x146x110xD', quantity: 14 },
+  ];
+  const result = packArticles(items, truck);
+  approx(result.totalLength, 9.66, 'combinación A+B comparten un único tramo de 9.66m');
+  assert.strictEqual(result.bins.length, 1, 'A y B deben caer en el mismo tramo');
+  const bin = result.bins[0];
+  approx(bin.usedWidth, 1.46 + 0.80, 'ancho usado combinado en el tramo');
+}
+
+// --- packArticles: artículos que no caben juntos de ninguna manera -> tramos separados ---
+{
+  // Dos artículos de 2,00 m de ancho (mínimo posible en cualquier orientación)
+  // nunca caben juntos en los 2,45 m del camión: cada uno necesita su propio tramo.
+  const items = [
+    { id: 1, name: 'Ancho1', code: '200x100x100xU', quantity: 2 }, // natural: 2.00 m
+    { id: 2, name: 'Ancho2', code: '200x080x100xU', quantity: 2 }, // natural: 1.60 m
+  ];
+  const result = packArticles(items, truck);
+  assert.strictEqual(result.bins.length, 2, 'no caben juntos, deben ir en tramos separados');
+  approx(result.totalLength, 3.60, 'suma de los dos tramos independientes (2.00 + 1.60)');
 }
 
 // --- toMeters heuristic ---

@@ -85,47 +85,133 @@ function stackingForOrientation({ height, type }, N, truckHeight) {
   };
 }
 
-// Calcula, para una línea de pedido (medida + cantidad), la mejor orientación
-// para minimizar los metros de largo de camión ocupados.
-function computeLineResult(code, quantity, truck) {
-  const pallet = parsePalletCode(code);
+// Enumera, para cada orientación posible del pallet, TODAS las opciones de
+// cuántas columnas (N) usar a lo ancho del camión (de 1 hasta el máximo que
+// cabe). Usar menos columnas que el máximo genera más metros de largo para
+// este artículo, pero libera ancho para que otro artículo pueda colocarse
+// al lado (ver `packArticles`).
+function enumerateOptions(pallet, quantity, truck) {
   const { dimA, dimB } = pallet;
-  const truckWidth = truck.width;
-  const truckHeight = truck.height;
-
   const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
 
-  const candidates = [];
+  const options = [];
   for (const [width, lengthDim] of orientations) {
-    const N = floorDiv(truckWidth, width);
-    if (N < 1) continue; // el pallet no cabe a lo ancho en esta orientación
+    const NMax = floorDiv(truck.width, width);
+    for (let N = 1; N <= NMax; N++) {
+      const stacking = stackingForOrientation(pallet, N, truck.height);
+      if (!stacking || stacking.perSlot < 1) continue;
 
-    const stacking = stackingForOrientation(pallet, N, truckHeight);
-    if (!stacking || stacking.perSlot < 1) continue;
+      const slots = ceilDiv(quantity, stacking.perSlot);
+      const length = slots * lengthDim;
+      const usedWidth = N * width;
 
-    const slots = ceilDiv(quantity, stacking.perSlot);
-    const length = slots * lengthDim;
-
-    candidates.push({
-      width,
-      lengthDim,
-      N,
-      ...stacking,
-      slots,
-      length,
-    });
+      options.push({ width, lengthDim, N, ...stacking, slots, length, usedWidth });
+    }
   }
+  return options;
+}
+
+// Calcula, para una línea de pedido (medida + cantidad), la mejor orientación
+// para minimizar los metros de largo de camión ocupados, sin compartir ancho
+// con ningún otro artículo (ver `packArticles` para la versión combinada).
+function computeLineResult(code, quantity, truck) {
+  const pallet = parsePalletCode(code);
+  const candidates = enumerateOptions(pallet, quantity, truck);
 
   if (candidates.length === 0) {
     throw new Error(
-      `El pallet "${code}" no cabe en el camión (ancho útil ${truckWidth} m) en ninguna orientación`
+      `El pallet "${code}" no cabe en el camión (ancho útil ${truck.width} m) en ninguna orientación`
     );
   }
 
-  candidates.sort((a, b) => a.length - b.length);
+  candidates.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
   const best = candidates[0];
 
   return { code, quantity, pallet, best, candidates };
+}
+
+// Combina varios artículos en el mismo camión, permitiendo que dos (o más)
+// compartan el mismo tramo de largo si sus anchos caben juntos en el ancho
+// útil del camión — por ejemplo, un artículo que solo usa 1,46 m de los
+// 2,45 m de ancho puede "prestar" el resto a otro artículo, que corre en
+// paralelo durante ese mismo tramo en vez de ir después.
+//
+// Heurística voraz: se procesan los artículos de mayor a menor largo propio
+// (si fuera solo); cada uno se intenta encajar en el hueco de ancho libre de
+// algún tramo ya abierto (probando, para ese artículo, todas las columnas N
+// posibles, no solo la que minimiza su propio largo) eligiendo la opción que
+// menos aumente el largo de ese tramo; si no cabe en ninguno sin penalizar
+// más que abrir un tramo nuevo, se abre un tramo nuevo con su mejor opción.
+//
+// items = [{ id, name, code, quantity }]
+function packArticles(items, truck) {
+  const prepared = items.map((item) => {
+    const pallet = parsePalletCode(item.code);
+    const options = enumerateOptions(pallet, item.quantity, truck);
+    if (options.length === 0) {
+      throw new Error(
+        `El pallet "${item.code}" no cabe en el camión (ancho útil ${truck.width} m) en ninguna orientación`
+      );
+    }
+    options.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
+    return { ...item, pallet, options, natural: options[0] };
+  });
+
+  prepared.sort((a, b) => b.natural.length - a.natural.length);
+
+  const bins = []; // { usedWidth, length, items: [{ id, name, code, quantity, pallet, option }] }
+  const placements = [];
+
+  for (const item of prepared) {
+    let bestChoice = null; // { cost, binIndex, option }
+
+    bins.forEach((bin, binIndex) => {
+      const freeWidth = truck.width - bin.usedWidth;
+      let bestForBin = null;
+      for (const opt of item.options) {
+        if (opt.usedWidth > freeWidth + EPS) continue;
+        const cost = Math.max(0, opt.length - bin.length);
+        if (
+          !bestForBin ||
+          cost < bestForBin.cost - EPS ||
+          (Math.abs(cost - bestForBin.cost) < EPS && opt.usedWidth < bestForBin.opt.usedWidth)
+        ) {
+          bestForBin = { cost, opt };
+        }
+      }
+      if (bestForBin && (!bestChoice || bestForBin.cost < bestChoice.cost - EPS)) {
+        bestChoice = { cost: bestForBin.cost, binIndex, option: bestForBin.opt };
+      }
+    });
+
+    const newBinCost = item.natural.length;
+    if (!bestChoice || newBinCost < bestChoice.cost - EPS) {
+      bestChoice = { cost: newBinCost, binIndex: bins.length, option: item.natural };
+    }
+
+    if (bestChoice.binIndex === bins.length) {
+      bins.push({ usedWidth: bestChoice.option.usedWidth, length: bestChoice.option.length, items: [] });
+    } else {
+      const bin = bins[bestChoice.binIndex];
+      bin.usedWidth += bestChoice.option.usedWidth;
+      bin.length = Math.max(bin.length, bestChoice.option.length);
+    }
+
+    const placement = {
+      id: item.id,
+      name: item.name,
+      code: item.code,
+      quantity: item.quantity,
+      pallet: item.pallet,
+      binIndex: bestChoice.binIndex,
+      option: bestChoice.option,
+    };
+    bins[bestChoice.binIndex].items.push(placement);
+    placements.push(placement);
+  }
+
+  const totalLength = bins.reduce((sum, bin) => sum + bin.length, 0);
+  return { bins, placements, totalLength };
 }
 
 // pedido = [{ code, quantity }, ...]
@@ -138,7 +224,9 @@ function computeOrderResult(pedido, truck) {
 const api = {
   parsePalletCode,
   toMeters,
+  enumerateOptions,
   computeLineResult,
+  packArticles,
   computeOrderResult,
 };
 

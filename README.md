@@ -14,12 +14,19 @@ a `http://localhost:8000`). Por cada artículo del pedido:
 3. Introduce la cantidad de pallets de ese artículo.
 4. Añade tantos artículos como tenga el pedido con "+ Añadir artículo".
 
-El total de metros de largo de todos los artículos se muestra abajo y se
-actualiza automáticamente al escribir. Debajo del total se dibuja un esquema
-en planta (vista desde arriba) del camión con la disposición real de los
-pallets: cada artículo tiene un color, cada recuadro es un pallet (o una
-columna apilada, con un `×N` si lleva varios niveles), y las zonas discontinuas
-marcan hueco de ancho o de pirámide sin usar.
+El total de metros de largo se muestra abajo y se actualiza automáticamente al
+escribir. Cuando dos (o más) artículos caben juntos a lo ancho del camión, la
+app los combina en el mismo tramo de largo en vez de ponerlos uno detrás de
+otro — así el largo total puede ser menor que la simple suma de cada artículo
+por separado. La fila de cada artículo indica cuando esto ocurre ("comparte
+hueco de ancho con otro artículo").
+
+Debajo del total se dibuja un esquema en planta (vista desde arriba) del
+camión con la disposición real de los pallets: cada artículo tiene un color,
+cada recuadro es un pallet (o una columna apilada, con un `×N` si lleva varios
+niveles), y las zonas discontinuas marcan hueco de ancho, de pirámide o de
+largo sin usar (cuando un artículo comparte tramo con otro que necesita más
+recorrido, su carril se queda "corto" dentro de ese mismo tramo).
 
 El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
 de la izquierda por si se usa con otro tipo de camión.
@@ -65,8 +72,28 @@ Para cada medida + cantidad del pedido:
    fila da un resultado mejor si la fila resultante es más profunda (aprovecha
    mejor los "huecos" de la última fila incompleta).
 
-El largo total del pedido es la suma de los largos calculados de cada artículo
-por separado (no se mezclan artículos de medidas distintas en la misma fila).
+## Cómo se combinan varios artículos en el mismo tramo
+
+Si un artículo no aprovecha todo el ancho del camión (por ejemplo, un pallet
+de 1,46 m de ancho en un camión de 2,45 m deja 0,99 m libres), la app intenta
+colocar otro artículo en ese hueco para que corran en paralelo el mismo tramo
+de largo, en vez de ir uno detrás del otro:
+
+1. Se ordenan los artículos de mayor a menor largo (si fueran solos).
+2. Cada artículo se intenta encajar en el hueco de ancho libre de algún tramo
+   ya abierto — probando, para ese artículo, usar menos columnas de las que
+   usaría en solitario (lo que le hace necesitar más filas y más largo *él
+   solo*, pero le permite compartir sitio) — eligiendo la opción que menos
+   alargue ese tramo.
+3. Si no cabe en ningún tramo ya abierto sin empeorar más que abrir uno
+   nuevo, se le abre un tramo nuevo con su disposición óptima en solitario.
+4. El largo de cada tramo es el mayor de los largos que necesita cualquiera
+   de los artículos que comparten ese tramo; el largo total del pedido es la
+   suma de los tramos.
+
+Es una heurística (no prueba absolutamente todas las combinaciones posibles),
+pero cubre bien el caso típico: un artículo que ya necesita mucho recorrido
+"presta" su ancho sobrante a otro más pequeño durante ese mismo tramo.
 
 ## Archivos
 
@@ -83,6 +110,7 @@ por separado (no se mezclan artículos de medidas distintas en la misma fila).
 - No hay límite de largo total de camión configurado en esta versión — solo se
   calculan y muestran los metros necesarios, sin avisar si superan la longitud
   real de un tráiler.
-- Cada medida de pallet distinta dentro de un pedido se calcula por separado
-  (con su propia orientación óptima) y los resultados se suman; no se intenta
-  combinar dos medidas distintas en la misma fila de ancho.
+- La combinación de artículos en el mismo tramo usa una heurística voraz
+  (ver más arriba), no una búsqueda exhaustiva de todas las combinaciones
+  posibles; en pedidos con muchos artículos distintos podría existir alguna
+  combinación ligeramente mejor que la heurística no encuentre.

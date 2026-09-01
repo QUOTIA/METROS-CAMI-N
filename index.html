@@ -88,6 +88,7 @@
   .grand-total .value { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
   .detail-toggle { cursor: pointer; }
   .detail-toggle:hover { color: var(--accent); }
+  .shared-hint { font-size: 0.75rem; color: var(--accent); margin-top: 2px; }
 
   .diagram-panel { margin-top: 16px; }
   .diagram-panel h2 { font-size: 1rem; margin: 0 0 4px; }
@@ -124,7 +125,7 @@
 <body>
 
 <h1>Calculadora de metros lineales de camión</h1>
-<p class="subtitle">Introduce cada artículo con su volumen en formato <code>ANCHOxLARGOxALTOxTIPO</code> (p. ej. <code>090X172X141XU</code>) y la cantidad de pallets. La app elige la orientación y el apilado que menos largo de camión ocupan, y suma el total.</p>
+<p class="subtitle">Introduce cada artículo con su volumen en formato <code>ANCHOxLARGOxALTOxTIPO</code> (p. ej. <code>090X172X141XU</code>) y la cantidad de pallets. La app elige la orientación y el apilado que menos largo de camión ocupan, combinando artículos distintos en el mismo tramo de ancho cuando caben juntos, para minimizar el total.</p>
 
 <div class="layout">
   <div class="panel truck-panel">
@@ -233,8 +234,7 @@ function render() {
 
 function renderResults() {
   const truck = getTruck();
-  let grandTotal = 0;
-  const diagramLines = [];
+  const validItems = [];
 
   articles.forEach((article) => {
     const cell = document.querySelector(`[data-result="${article.id}"]`);
@@ -249,21 +249,34 @@ function renderResults() {
     const qty = parseInt(article.quantity, 10);
     try {
       if (!Number.isFinite(qty) || qty <= 0) throw new Error('Cantidad inválida');
-      const r = window.PalletCalc.computeLineResult(article.code, qty, truck);
-      const b = r.best;
-      grandTotal += b.length;
-      cell.className = 'result-cell';
-      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(b.length)} m</b> (${b.N} a lo ancho, ${b.description}, ${b.slots} fila(s) de ${fmt(b.lengthDim)} m)</span>`;
-      diagramLines.push({ name: article.name, code: article.code, ok: true, result: r });
+      window.PalletCalc.computeLineResult(article.code, qty, truck); // valida formato y que quepa
+      validItems.push({ id: article.id, name: article.name, code: article.code, quantity: qty });
     } catch (err) {
       cell.className = 'result-cell error';
       cell.textContent = err.message;
-      diagramLines.push({ name: article.name, code: article.code, ok: false });
     }
   });
 
-  document.getElementById('grandTotalValue').textContent = `${fmt(grandTotal)} m`;
-  window.renderTruckDiagram(document.getElementById('diagramHost'), diagramLines, truck);
+  const packResult = validItems.length > 0 ? window.PalletCalc.packArticles(validItems, truck) : null;
+  const placementById = new Map((packResult ? packResult.placements : []).map((p) => [p.id, p]));
+
+  validItems.forEach((item) => {
+    const cell = document.querySelector(`[data-result="${item.id}"]`);
+    const placement = placementById.get(item.id);
+    if (!cell || !placement) return;
+
+    const opt = placement.option;
+    const shared = packResult.bins[placement.binIndex].items.length > 1;
+    cell.className = 'result-cell';
+    cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (${opt.N} a lo ancho, ${opt.description}, ${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m)</span>${
+      shared ? '<div class="shared-hint">comparte hueco de ancho con otro artículo en el mismo tramo</div>' : ''
+    }`;
+  });
+
+  document.getElementById('grandTotalValue').textContent = `${fmt(packResult ? packResult.totalLength : 0)} m`;
+
+  const orderedIds = validItems.map((item) => item.id);
+  window.renderTruckDiagram(document.getElementById('diagramHost'), packResult, truck, orderedIds);
 }
 
 document.getElementById('addRowBtn').addEventListener('click', addRow);
