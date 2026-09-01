@@ -260,19 +260,40 @@ function renderResults() {
   });
 
   const packResult = validItems.length > 0 ? window.PalletCalc.packArticles(validItems, truck) : null;
-  const placementById = new Map((packResult ? packResult.placements : []).map((p) => [p.id, p]));
+
+  // Cada artículo original se busca por su propio id, aunque forme parte de
+  // un bloque combinado por huella compartida (`isFamily`).
+  const entryById = new Map();
+  (packResult ? packResult.placements : []).forEach((placement) => {
+    if (placement.isFamily) {
+      placement.members.forEach((member) => entryById.set(member.id, { placement, isFamily: true }));
+    } else {
+      entryById.set(placement.id, { placement, isFamily: false });
+    }
+  });
 
   validItems.forEach((item) => {
     const cell = document.querySelector(`[data-result="${item.id}"]`);
-    const placement = placementById.get(item.id);
-    if (!cell || !placement) return;
+    const entry = entryById.get(item.id);
+    if (!cell || !entry) return;
 
+    const { placement, isFamily } = entry;
     const opt = placement.option;
-    const shared = packResult.bins[placement.binIndex].items.length > 1;
     cell.className = 'result-cell';
-    cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (${opt.N} a lo ancho, ${opt.description}, ${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m)</span>${
-      shared ? '<div class="shared-hint">comparte hueco de ancho con otro artículo en el mismo tramo</div>' : ''
-    }`;
+
+    if (isFamily) {
+      const otherNames = placement.members
+        .filter((m) => m.id !== item.id)
+        .map((m) => m.name || m.code)
+        .join(', ');
+      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (bloque combinado, ${opt.N} a lo ancho, ${opt.rows} fila(s) de ${fmt(opt.lengthDim)} m)</span>
+        <div class="shared-hint">misma base que ${otherNames}: se apilan mezclados en la misma columna</div>`;
+    } else {
+      const shared = packResult.bins[placement.binIndex].items.length > 1;
+      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (${opt.N} a lo ancho, ${opt.description}, ${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m)</span>${
+        shared ? '<div class="shared-hint">comparte hueco de ancho con otro artículo en el mismo tramo</div>' : ''
+      }`;
+    }
   });
 
   document.getElementById('grandTotalValue').textContent = `${fmt(packResult ? packResult.totalLength : 0)} m`;

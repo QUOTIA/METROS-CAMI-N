@@ -123,6 +123,86 @@ function drawPyramidSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
   }
 }
 
+// Dibuja una celda (una columna de una fila) que puede contener pallets de
+// varias referencias apiladas: se subdivide en tantas bandas horizontales
+// como pallets haya en la pila, cada una con el color de su referencia.
+function drawStackCell(group, x, y, width, lengthDim, stackItems, colorById) {
+  const bandHeight = lengthDim / stackItems.length;
+  stackItems.forEach((item, i) => {
+    const bandY = y + i * bandHeight;
+    group.appendChild(el('rect', {
+      x, y: bandY, width, height: bandHeight,
+      class: 'pallet-cell',
+      fill: colorById.get(item.id) || DIAGRAM_PALETTE[0],
+      'fill-opacity': 0.8,
+    }));
+    if (stackItems.length > 1) {
+      const label = el('text', {
+        x: x + width / 2, y: bandY + bandHeight / 2,
+        class: 'cell-badge', 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+      });
+      label.textContent = fmtM(item.height);
+      group.appendChild(label);
+    }
+  });
+  labelCell(group, x, y, width, lengthDim);
+}
+
+// Dibuja un bloque combinado (`packFootprintFamily`): varias referencias con
+// la misma base repartidas en columnas y huecos de pirámide, mezclando
+// referencias distintas en la misma columna cuando hace falta.
+function drawFamilyPlacement(svg, placement, yStart, binLength, xOffset, colorById) {
+  const group = el('g', {});
+  const { N, width, lengthDim, rows, columnBins, nestedItems } = placement.option;
+
+  for (let r = 0; r < rows; r++) {
+    const slotY = yStart + r * lengthDim;
+    const rowBins = columnBins.slice(r * N, (r + 1) * N);
+    for (let c = 0; c < N; c++) {
+      const x = xOffset + c * width;
+      const stackItems = rowBins[c];
+      if (stackItems && stackItems.length > 0) {
+        drawStackCell(group, x, slotY, width, lengthDim, stackItems, colorById);
+      } else {
+        group.appendChild(el('rect', {
+          x, y: slotY, width, height: lengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+        }));
+      }
+    }
+
+    if (N >= 2) {
+      const rowNested = nestedItems.slice(r * (N - 1), (r + 1) * (N - 1));
+      const topW = width * 0.6;
+      const topH = lengthDim * 0.6;
+      for (let c = 0; c < N - 1; c++) {
+        const item = rowNested[c];
+        if (!item) continue;
+        const x = xOffset + (c + 1) * width - topW / 2;
+        const y = slotY + (lengthDim - topH) / 2;
+        group.appendChild(el('rect', {
+          x, y, width: topW, height: topH, class: 'pallet-cell pyramid-top',
+          fill: colorById.get(item.id) || DIAGRAM_PALETTE[0], 'fill-opacity': 0.9,
+        }));
+      }
+    }
+
+    if (r > 0) {
+      group.appendChild(el('line', {
+        x1: xOffset, x2: xOffset + N * width, y1: slotY, y2: slotY, class: 'slot-divider',
+      }));
+    }
+  }
+
+  if (placement.option.length < binLength - DIAG_EPS) {
+    group.appendChild(el('rect', {
+      x: xOffset, y: yStart + placement.option.length, width: placement.option.usedWidth,
+      height: binLength - placement.option.length, class: 'unused-width',
+    }));
+  }
+
+  svg.appendChild(group);
+}
+
 // Dibuja un artículo (una entrada de `bin.items`) dentro de su carril,
 // ocupando de `yStart` a `yStart + opt.length`; si el tramo (bin) es más
 // largo que lo que este artículo necesita, el resto del carril se marca
@@ -192,8 +272,12 @@ function renderTruckDiagram(container, packResult, truck, orderedIds) {
   packResult.bins.forEach((bin, binIdx) => {
     let xCursor = 0;
     bin.items.forEach((placement) => {
-      const color = colorById.get(placement.id) || DIAGRAM_PALETTE[0];
-      drawPlacement(svg, placement, yCursor, bin.length, xCursor, color);
+      if (placement.isFamily) {
+        drawFamilyPlacement(svg, placement, yCursor, bin.length, xCursor, colorById);
+      } else {
+        const color = colorById.get(placement.id) || DIAGRAM_PALETTE[0];
+        drawPlacement(svg, placement, yCursor, bin.length, xCursor, color);
+      }
       xCursor += placement.option.usedWidth;
     });
 
@@ -211,17 +295,27 @@ function renderTruckDiagram(container, packResult, truck, orderedIds) {
 
   container.appendChild(svg);
 
+  // Para la leyenda, cada artículo original (aunque forme parte de un bloque
+  // combinado) se busca por su propio id, no por el id del bloque.
+  const entryById = new Map();
+  packResult.placements.forEach((placement) => {
+    if (placement.isFamily) {
+      placement.members.forEach((member) => entryById.set(member.id, { member, option: placement.option }));
+    } else {
+      entryById.set(placement.id, { member: placement, option: placement.option });
+    }
+  });
+
   const legend = document.createElement('div');
   legend.className = 'diagram-legend';
-  const placementById = new Map(packResult.placements.map((p) => [p.id, p]));
   orderedIds.forEach((id) => {
-    const placement = placementById.get(id);
-    if (!placement) return;
+    const entry = entryById.get(id);
+    if (!entry) return;
     const item = document.createElement('span');
     item.className = 'legend-item';
     item.innerHTML = `<i style="background:${colorById.get(id)}"></i>${
-      placement.name ? `${placement.name} — ` : ''
-    }${placement.code} (${fmtM(placement.option.length)} m)`;
+      entry.member.name ? `${entry.member.name} — ` : ''
+    }${entry.member.code} (${fmtM(entry.option.length)} m)`;
     legend.appendChild(item);
   });
   container.appendChild(legend);
