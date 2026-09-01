@@ -130,6 +130,94 @@ function computeLineResult(code, quantity, truck) {
   return { code, quantity, pallet, best, candidates };
 }
 
+// Clave que identifica la "base" (medida ancho x largo) de un pallet,
+// independiente de en qué orden se escribieran las dos medidas y de su
+// altura o tipo. Dos artículos con la misma clave pueden apilarse pallets
+// del uno sobre el otro (misma huella).
+function footprintKey(pallet) {
+  const a = Math.min(pallet.dimA, pallet.dimB);
+  const b = Math.max(pallet.dimA, pallet.dimB);
+  return `${a.toFixed(4)}x${b.toFixed(4)}`;
+}
+
+// Reparte una lista de alturas en "columnas" (pilas verticales) de capacidad
+// `truckHeight`, con el heurístico First-Fit-Decreasing: se ordena de mayor
+// a menor altura y cada pallet se mete en la primera columna donde quepa,
+// o abre una columna nueva si no cabe en ninguna abierta.
+function packHeightsFFD(pool, truckHeight) {
+  const sorted = [...pool].sort((a, b) => b.height - a.height);
+  const bins = [];
+  for (const item of sorted) {
+    let placed = false;
+    for (const bin of bins) {
+      if (bin.used + item.height <= truckHeight + EPS) {
+        bin.items.push(item);
+        bin.used += item.height;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) bins.push({ items: [item], used: item.height });
+  }
+  return bins;
+}
+
+// Combina varios artículos que comparten EXACTAMENTE la misma base (ancho x
+// largo) en un único bloque: sus pallets se reparten libremente entre las N
+// columnas a lo ancho (mezclando referencias distintas en la misma columna,
+// una encima de otra, mientras quepan en altura) y, si N >= 2, también en
+// los N-1 huecos "nesteados" de tipo pirámide entre columnas (un pallet
+// suelto de cualquier referencia, sin más apilado encima). Se calcula el
+// menor número de filas necesario para colocar todos los pallets del grupo.
+//
+// articles = [{ id, name, code, quantity, pallet }] (misma huella entre sí)
+function packFootprintFamily(articles, truck) {
+  const { dimA, dimB } = articles[0].pallet;
+  const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
+
+  const pool = [];
+  for (const art of articles) {
+    for (let i = 0; i < art.quantity; i++) {
+      pool.push({ id: art.id, name: art.name, code: art.code, height: art.pallet.height });
+    }
+  }
+
+  let best = null;
+  for (const [width, lengthDim] of orientations) {
+    const N = floorDiv(truck.width, width);
+    if (N < 1) continue;
+
+    const bins = packHeightsFFD(pool, truck.height);
+    const singles = bins.filter((b) => b.items.length === 1);
+    const nonSingles = bins.filter((b) => b.items.length > 1);
+
+    let chosenRows = bins.length; // cota superior segura (sin usar nesteado)
+    for (let r = 1; r <= bins.length; r++) {
+      const nestedCapacity = r * Math.max(0, N - 1);
+      const leftoverSingles = Math.max(0, singles.length - nestedCapacity);
+      const columnBinsNeeded = nonSingles.length + leftoverSingles;
+      if (columnBinsNeeded <= r * N) {
+        chosenRows = r;
+        break;
+      }
+    }
+
+    const nestedCapacity = chosenRows * Math.max(0, N - 1);
+    const offloadCount = Math.min(singles.length, nestedCapacity);
+    const nestedItems = singles.slice(0, offloadCount).map((b) => b.items[0]);
+    const columnBins = [...nonSingles, ...singles.slice(offloadCount)].map((b) => b.items);
+
+    const length = chosenRows * lengthDim;
+    const usedWidth = N * width;
+
+    if (!best || length < best.length - EPS) {
+      best = { width, lengthDim, N, rows: chosenRows, length, usedWidth, columnBins, nestedItems, isFamily: true };
+    }
+  }
+
+  return best;
+}
+
 // Para un grupo de artículos (índices en `prepared`) que compartirían el
 // mismo tramo de largo, prueba TODAS las combinaciones de sus opciones
 // (orientación + columnas) y devuelve la que quepa a lo ancho del camión
@@ -155,6 +243,16 @@ function bestGroupAssignment(indices, prepared, truck) {
   return best;
 }
 
+function makePlacement(item, option, binIndex) {
+  if (item.isFamily) {
+    return { id: item.id, isFamily: true, members: item.members, binIndex, option };
+  }
+  return {
+    id: item.id, name: item.name, code: item.code, quantity: item.quantity,
+    pallet: item.pallet, binIndex, option,
+  };
+}
+
 function buildBinsFromGroups(groups, prepared) {
   const bins = [];
   const placements = [];
@@ -164,10 +262,7 @@ function buildBinsFromGroups(groups, prepared) {
       const item = prepared[idx];
       const option = result.combo[k];
       bin.usedWidth += option.usedWidth;
-      const placement = {
-        id: item.id, name: item.name, code: item.code, quantity: item.quantity,
-        pallet: item.pallet, binIndex: bins.length, option,
-      };
+      const placement = makePlacement(item, option, bins.length);
       bin.items.push(placement);
       placements.push(placement);
     });
@@ -291,10 +386,7 @@ function packArticlesGreedy(prepared, truck) {
       bin.length = Math.max(bin.length, bestChoice.option.length);
     }
 
-    const placement = {
-      id: item.id, name: item.name, code: item.code, quantity: item.quantity,
-      pallet: item.pallet, binIndex: bestChoice.binIndex, option: bestChoice.option,
-    };
+    const placement = makePlacement(item, bestChoice.option, bestChoice.binIndex);
     bins[bestChoice.binIndex].items.push(placement);
     placements.push(placement);
   }
@@ -317,21 +409,51 @@ function packArticlesGreedy(prepared, truck) {
 // hasta 3 artículos). Con más referencias se usa una heurística voraz más
 // rápida pero no garantizada óptima (`packArticlesGreedy`).
 //
-// items = [{ id, name, code, quantity }]
+// Artículos con la misma huella (ancho x largo) se agrupan primero en un
+// único bloque combinado (`packFootprintFamily`) que reparte sus pallets
+// libremente entre columnas y huecos de pirámide; ese bloque combinado pasa
+// a competir por hueco de ancho con el resto de artículos igual que uno
+// cualquiera. items = [{ id, name, code, quantity }]
 const MAX_EXACT_ARTICLES = 14;
 
 function packArticles(items, truck) {
-  const prepared = items.map((item) => {
-    const pallet = parsePalletCode(item.code);
-    const options = enumerateOptions(pallet, item.quantity, truck);
+  const parsedItems = items.map((item) => ({ ...item, pallet: parsePalletCode(item.code) }));
+
+  // Validar cada artículo por separado (mensaje de error específico) antes
+  // de agrupar por huella.
+  parsedItems.forEach((item) => {
+    const options = enumerateOptions(item.pallet, item.quantity, truck);
     if (options.length === 0) {
       throw new Error(
         `El pallet "${item.code}" no cabe en el camión (ancho útil ${truck.width} m) en ninguna orientación`
       );
     }
-    options.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
-    return { ...item, pallet, options };
   });
+
+  const familiesByKey = new Map();
+  for (const item of parsedItems) {
+    const key = footprintKey(item.pallet);
+    if (!familiesByKey.has(key)) familiesByKey.set(key, []);
+    familiesByKey.get(key).push(item);
+  }
+
+  const prepared = [];
+  for (const group of familiesByKey.values()) {
+    if (group.length >= 2) {
+      const familyResult = packFootprintFamily(group, truck);
+      prepared.push({
+        id: `family:${group.map((g) => g.id).join(',')}`,
+        isFamily: true,
+        members: group,
+        options: [familyResult],
+      });
+    } else {
+      const item = group[0];
+      const options = enumerateOptions(item.pallet, item.quantity, truck);
+      options.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
+      prepared.push({ ...item, options });
+    }
+  }
 
   if (prepared.length === 0) return { bins: [], placements: [], totalLength: 0 };
 
@@ -355,6 +477,8 @@ const api = {
   toMeters,
   enumerateOptions,
   computeLineResult,
+  footprintKey,
+  packFootprintFamily,
   packArticles,
   computeOrderResult,
 };

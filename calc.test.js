@@ -118,6 +118,43 @@ function approx(a, b, msg) {
   assert.strictEqual(result.bins.length, 1, 'A y B deben caer en el mismo tramo');
 }
 
+// --- packArticles: artículos con la MISMA base (huella) se combinan en un
+// único bloque, mezclando referencias distintas en la misma columna y en
+// los huecos de pirámide, no solo lado a lado ---
+{
+  // Las tres referencias comparten base 0.80x1.20:
+  // ref1: P, altura 0.92, 6 uds. ref2: D, altura 1.00, 3 uds. ref3: D, altura 1.35, 2 uds.
+  // Sin combinar por altura (una columna por referencia): 1.60 + 1.20 = 2.80m.
+  // Combinando alturas en columnas + huecos de pirámide: 3 columnas de 0.80m
+  // (2.40m de ancho), reparto por alturas (FFD) da 6 "pilas": dos de 1.35+1.35,
+  // 1.00+1.00, 1.00+0.92, 0.92+0.92, 0.92+0.92, y una suelta de 0.92 que cabe
+  // en un hueco de pirámide -> 2 filas de 1.20m = 2.40m.
+  const items = [
+    { id: 1, name: 'ref1', code: '080x120x092xP', quantity: 6 },
+    { id: 2, name: 'ref2', code: '080x120x100xD', quantity: 3 },
+    { id: 3, name: 'ref3', code: '080x120x135xD', quantity: 2 },
+  ];
+  const result = packArticles(items, truck);
+  approx(result.totalLength, 2.40, 'combinación por huella compartida (mezcla en la misma columna)');
+  assert.strictEqual(result.bins.length, 1, 'las tres referencias caen en el mismo bloque');
+  const placement = result.bins[0].items[0];
+  assert.ok(placement.isFamily, 'el bloque combinado debe marcarse como familia de huella compartida');
+  assert.strictEqual(placement.members.length, 3, 'las tres referencias deben ser miembros de la familia');
+  const totalPalletsPlaced =
+    placement.option.columnBins.reduce((sum, col) => sum + col.length, 0) + placement.option.nestedItems.length;
+  assert.strictEqual(totalPalletsPlaced, 11, 'los 11 pallets (6+3+2) deben quedar todos colocados');
+}
+
+// --- packFootprintFamily: artículos con distinta base NO deben agruparse ---
+{
+  const { footprintKey, parsePalletCode } = require('./calc.js');
+  const p1 = parsePalletCode('080x120x092xP');
+  const p2 = parsePalletCode('090x130x125xD');
+  assert.notStrictEqual(footprintKey(p1), footprintKey(p2), 'bases distintas deben dar claves distintas');
+  const p3 = parsePalletCode('120x080x100xD'); // misma base que p1, medidas en otro orden
+  assert.strictEqual(footprintKey(p1), footprintKey(p3), 'misma base en otro orden debe dar la misma clave');
+}
+
 // --- toMeters heuristic ---
 {
   approx(toMeters('090'), 0.90, 'toMeters cm');
