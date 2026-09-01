@@ -130,40 +130,134 @@ function computeLineResult(code, quantity, truck) {
   return { code, quantity, pallet, best, candidates };
 }
 
-// Combina varios artículos en el mismo camión, permitiendo que dos (o más)
-// compartan el mismo tramo de largo si sus anchos caben juntos en el ancho
-// útil del camión — por ejemplo, un artículo que solo usa 1,46 m de los
-// 2,45 m de ancho puede "prestar" el resto a otro artículo, que corre en
-// paralelo durante ese mismo tramo en vez de ir después.
-//
-// Heurística voraz: se procesan los artículos de mayor a menor largo propio
-// (si fuera solo); cada uno se intenta encajar en el hueco de ancho libre de
-// algún tramo ya abierto (probando, para ese artículo, todas las columnas N
-// posibles, no solo la que minimiza su propio largo) eligiendo la opción que
-// menos aumente el largo de ese tramo; si no cabe en ninguno sin penalizar
-// más que abrir un tramo nuevo, se abre un tramo nuevo con su mejor opción.
-//
-// items = [{ id, name, code, quantity }]
-function packArticles(items, truck) {
-  const prepared = items.map((item) => {
-    const pallet = parsePalletCode(item.code);
-    const options = enumerateOptions(pallet, item.quantity, truck);
-    if (options.length === 0) {
-      throw new Error(
-        `El pallet "${item.code}" no cabe en el camión (ancho útil ${truck.width} m) en ninguna orientación`
-      );
+// Para un grupo de artículos (índices en `prepared`) que compartirían el
+// mismo tramo de largo, prueba TODAS las combinaciones de sus opciones
+// (orientación + columnas) y devuelve la que quepa a lo ancho del camión
+// minimizando el largo del tramo (el mayor largo de los artículos del
+// grupo). Devuelve null si ninguna combinación cabe junta.
+function bestGroupAssignment(indices, prepared, truck) {
+  let combos = [[]];
+  for (const idx of indices) {
+    const next = [];
+    for (const combo of combos) {
+      for (const opt of prepared[idx].options) next.push([...combo, opt]);
     }
-    options.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
-    return { ...item, pallet, options, natural: options[0] };
-  });
+    combos = next;
+  }
 
-  prepared.sort((a, b) => b.natural.length - a.natural.length);
+  let best = null;
+  for (const combo of combos) {
+    const totalWidth = combo.reduce((sum, opt) => sum + opt.usedWidth, 0);
+    if (totalWidth > truck.width + EPS) continue;
+    const length = combo.reduce((max, opt) => Math.max(max, opt.length), 0);
+    if (!best || length < best.length - EPS) best = { length, combo };
+  }
+  return best;
+}
 
-  const bins = []; // { usedWidth, length, items: [{ id, name, code, quantity, pallet, option }] }
+function buildBinsFromGroups(groups, prepared) {
+  const bins = [];
+  const placements = [];
+  for (const { indices, result } of groups) {
+    const bin = { usedWidth: 0, length: result.length, items: [] };
+    indices.forEach((idx, k) => {
+      const item = prepared[idx];
+      const option = result.combo[k];
+      bin.usedWidth += option.usedWidth;
+      const placement = {
+        id: item.id, name: item.name, code: item.code, quantity: item.quantity,
+        pallet: item.pallet, binIndex: bins.length, option,
+      };
+      bin.items.push(placement);
+      placements.push(placement);
+    });
+    bins.push(bin);
+  }
+  const totalLength = bins.reduce((sum, bin) => sum + bin.length, 0);
+  return { bins, placements, totalLength };
+}
+
+// Busca la partición ÓPTIMA de los artículos en tramos (grupos de hasta
+// `maxGroup` artículos que comparten tramo), minimizando la suma de los
+// largos de cada tramo. Programación dinámica sobre subconjuntos (bitmask):
+// dp[mask] = menor largo total para cubrir exactamente los artículos de
+// `mask`. Cada grupo candidato se evalúa una sola vez (memoizado por su
+// máscara) aunque aparezca en muchos subproblemas.
+function packArticlesExact(prepared, truck, maxGroup) {
+  const n = prepared.length;
+  const fullMask = (1 << n) - 1;
+  const groupCache = new Map();
+
+  function getGroupResult(indices) {
+    let mask = 0;
+    for (const idx of indices) mask |= 1 << idx;
+    if (groupCache.has(mask)) return groupCache.get(mask);
+    const result = bestGroupAssignment(indices, prepared, truck);
+    groupCache.set(mask, result);
+    return result;
+  }
+
+  const dp = new Array(1 << n).fill(Infinity);
+  const choice = new Array(1 << n).fill(null); // { indices, result }
+  dp[0] = 0;
+
+  for (let mask = 1; mask <= fullMask; mask++) {
+    const lowIndex = Math.log2(mask & -mask) | 0;
+    const restIndices = [];
+    for (let i = 0; i < n; i++) {
+      if (i !== lowIndex && (mask & (1 << i))) restIndices.push(i);
+    }
+
+    const candidateGroups = [[lowIndex]];
+    if (maxGroup >= 2) {
+      for (const r of restIndices) candidateGroups.push([lowIndex, r]);
+    }
+    if (maxGroup >= 3) {
+      for (let a = 0; a < restIndices.length; a++) {
+        for (let b = a + 1; b < restIndices.length; b++) {
+          candidateGroups.push([lowIndex, restIndices[a], restIndices[b]]);
+        }
+      }
+    }
+
+    for (const indices of candidateGroups) {
+      const result = getGroupResult(indices);
+      if (!result) continue;
+      let groupMask = 0;
+      for (const idx of indices) groupMask |= 1 << idx;
+      const remaining = mask ^ groupMask;
+      const total = result.length + dp[remaining];
+      if (total < dp[mask] - EPS) {
+        dp[mask] = total;
+        choice[mask] = { indices, result };
+      }
+    }
+  }
+
+  const groups = [];
+  let mask = fullMask;
+  while (mask !== 0) {
+    const { indices, result } = choice[mask];
+    groups.push({ indices, result });
+    let groupMask = 0;
+    for (const idx of indices) groupMask |= 1 << idx;
+    mask ^= groupMask;
+  }
+
+  return buildBinsFromGroups(groups, prepared);
+}
+
+// Heurística voraz (rápida, aproximada) usada solo cuando hay demasiados
+// artículos distintos para la búsqueda exacta: se procesan de mayor a menor
+// largo propio y cada uno se intenta encajar en el hueco de ancho libre de
+// algún tramo ya abierto antes de abrir uno nuevo.
+function packArticlesGreedy(prepared, truck) {
+  const ordered = [...prepared].sort((a, b) => b.options[0].length - a.options[0].length);
+  const bins = [];
   const placements = [];
 
-  for (const item of prepared) {
-    let bestChoice = null; // { cost, binIndex, option }
+  for (const item of ordered) {
+    let bestChoice = null;
 
     bins.forEach((bin, binIndex) => {
       const freeWidth = truck.width - bin.usedWidth;
@@ -184,9 +278,9 @@ function packArticles(items, truck) {
       }
     });
 
-    const newBinCost = item.natural.length;
-    if (!bestChoice || newBinCost < bestChoice.cost - EPS) {
-      bestChoice = { cost: newBinCost, binIndex: bins.length, option: item.natural };
+    const natural = item.options[0];
+    if (!bestChoice || natural.length < bestChoice.cost - EPS) {
+      bestChoice = { cost: natural.length, binIndex: bins.length, option: natural };
     }
 
     if (bestChoice.binIndex === bins.length) {
@@ -198,13 +292,8 @@ function packArticles(items, truck) {
     }
 
     const placement = {
-      id: item.id,
-      name: item.name,
-      code: item.code,
-      quantity: item.quantity,
-      pallet: item.pallet,
-      binIndex: bestChoice.binIndex,
-      option: bestChoice.option,
+      id: item.id, name: item.name, code: item.code, quantity: item.quantity,
+      pallet: item.pallet, binIndex: bestChoice.binIndex, option: bestChoice.option,
     };
     bins[bestChoice.binIndex].items.push(placement);
     placements.push(placement);
@@ -212,6 +301,46 @@ function packArticles(items, truck) {
 
   const totalLength = bins.reduce((sum, bin) => sum + bin.length, 0);
   return { bins, placements, totalLength };
+}
+
+// Combina varios artículos en el mismo camión, permitiendo que dos o tres
+// compartan el mismo tramo de largo si sus anchos caben juntos en el ancho
+// útil del camión — por ejemplo, un artículo que solo usa 1,46 m de los
+// 2,45 m de ancho puede "prestar" el resto a otro artículo, que corre en
+// paralelo durante ese mismo tramo en vez de ir después. No hace falta que
+// cada artículo use su propia disposición óptima en solitario: a veces usar
+// menos columnas (más largo para ese artículo solo) permite una combinación
+// con mucho menos largo total.
+//
+// Para pedidos con pocas referencias distintas (hasta `MAX_EXACT_ARTICLES`)
+// se calcula la partición óptima exacta (`packArticlesExact`, grupos de
+// hasta 3 artículos). Con más referencias se usa una heurística voraz más
+// rápida pero no garantizada óptima (`packArticlesGreedy`).
+//
+// items = [{ id, name, code, quantity }]
+const MAX_EXACT_ARTICLES = 14;
+
+function packArticles(items, truck) {
+  const prepared = items.map((item) => {
+    const pallet = parsePalletCode(item.code);
+    const options = enumerateOptions(pallet, item.quantity, truck);
+    if (options.length === 0) {
+      throw new Error(
+        `El pallet "${item.code}" no cabe en el camión (ancho útil ${truck.width} m) en ninguna orientación`
+      );
+    }
+    options.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
+    return { ...item, pallet, options };
+  });
+
+  if (prepared.length === 0) return { bins: [], placements: [], totalLength: 0 };
+
+  if (prepared.length > MAX_EXACT_ARTICLES) {
+    return packArticlesGreedy(prepared, truck);
+  }
+
+  const maxGroup = Math.min(3, prepared.length);
+  return packArticlesExact(prepared, truck, maxGroup);
 }
 
 // pedido = [{ code, quantity }, ...]

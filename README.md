@@ -74,26 +74,33 @@ Para cada medida + cantidad del pedido:
 
 ## Cómo se combinan varios artículos en el mismo tramo
 
-Si un artículo no aprovecha todo el ancho del camión (por ejemplo, un pallet
-de 1,46 m de ancho en un camión de 2,45 m deja 0,99 m libres), la app intenta
-colocar otro artículo en ese hueco para que corran en paralelo el mismo tramo
-de largo, en vez de ir uno detrás del otro:
+Si dos (o tres) artículos caben juntos a lo ancho del camión —aunque sea
+usando una disposición distinta a la que cada uno usaría en solitario—, la
+app los coloca en el mismo tramo de largo, en paralelo, en vez de uno detrás
+de otro:
 
-1. Se ordenan los artículos de mayor a menor largo (si fueran solos).
-2. Cada artículo se intenta encajar en el hueco de ancho libre de algún tramo
-   ya abierto — probando, para ese artículo, usar menos columnas de las que
-   usaría en solitario (lo que le hace necesitar más filas y más largo *él
-   solo*, pero le permite compartir sitio) — eligiendo la opción que menos
-   alargue ese tramo.
-3. Si no cabe en ningún tramo ya abierto sin empeorar más que abrir uno
-   nuevo, se le abre un tramo nuevo con su disposición óptima en solitario.
-4. El largo de cada tramo es el mayor de los largos que necesita cualquiera
-   de los artículos que comparten ese tramo; el largo total del pedido es la
-   suma de los tramos.
+1. Para cada artículo se generan **todas** las combinaciones posibles de
+   orientación + número de columnas (no solo la que minimiza su propio largo
+   en solitario — usar menos columnas ocupa menos ancho pero necesita más
+   filas, es decir, más largo *para ese artículo solo*).
+2. Se busca la partición óptima de todos los artículos del pedido en grupos
+   de hasta 3 (que comparten tramo) tal que, para cada grupo, exista una
+   combinación de disposiciones cuyo ancho conjunto quepa en el camión, y que
+   la suma de los largos de cada tramo (el largo de un tramo es el mayor
+   largo que necesite cualquier artículo del grupo) sea la mínima posible.
+   Se calcula por programación dinámica sobre subconjuntos: es una búsqueda
+   **exacta**, no una heurística — encuentra el óptimo real dentro de este
+   modelo (hasta 14 artículos distintos; con más, se usa una heurística
+   voraz más rápida pero no garantizada óptima, ya que el número de
+   combinaciones crece demasiado para calcularlas todas al instante).
+3. El largo total del pedido es la suma de los largos de todos los tramos
+   resultantes.
 
-Es una heurística (no prueba absolutamente todas las combinaciones posibles),
-pero cubre bien el caso típico: un artículo que ya necesita mucho recorrido
-"presta" su ancho sobrante a otro más pequeño durante ese mismo tramo.
+Por ejemplo, dos artículos que "en solitario" ocupan cada uno 2 columnas y no
+caben juntos (sus anchos naturales suman más de 2,45 m) sí pueden caber
+juntos si cada uno usa solo 1 columna — aunque eso signifique más filas (más
+largo) para cada uno por separado, el largo combinado (el máximo de los dos)
+puede ser bastante menor que la suma de sus largos por separado.
 
 ## Archivos
 
@@ -110,7 +117,8 @@ pero cubre bien el caso típico: un artículo que ya necesita mucho recorrido
 - No hay límite de largo total de camión configurado en esta versión — solo se
   calculan y muestran los metros necesarios, sin avisar si superan la longitud
   real de un tráiler.
-- La combinación de artículos en el mismo tramo usa una heurística voraz
-  (ver más arriba), no una búsqueda exhaustiva de todas las combinaciones
-  posibles; en pedidos con muchos artículos distintos podría existir alguna
-  combinación ligeramente mejor que la heurística no encuentre.
+- Los tramos combinan como máximo 3 artículos distintos a la vez (en la
+  práctica, más de 3 pallets distintos rara vez caben juntos a lo ancho de un
+  camión). La búsqueda es exacta hasta 14 artículos distintos en el pedido;
+  con más, se usa una heurística voraz que no garantiza el óptimo (ver
+  "Cómo se combinan varios artículos en el mismo tramo").

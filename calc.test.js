@@ -98,6 +98,26 @@ function approx(a, b, msg) {
   approx(result.totalLength, 3.60, 'suma de los dos tramos independientes (2.00 + 1.60)');
 }
 
+// --- packArticles: caso reportado donde la heurística voraz antigua fallaba.
+// Ninguno de los dos artículos cabe junto a otro usando su ancho "natural"
+// (2 columnas cada uno), pero SÍ cabe una combinación donde ambos usan solo
+// 1 columna (con una orientación distinta a la suya "natural" cada uno) ---
+{
+  // A: 085x131x125xD, 7 uds -> natural: 2 a lo ancho (1.70m), length 2.62m
+  // B: 090x130x125xD, 9 uds -> natural: 2 a lo ancho (1.80m), length 3.90m
+  // Naturales no caben juntos (1.70+1.80=3.50 > 2.45) -> en secuencia: 6.52m.
+  // Óptimo real: A a 1 columna de 0.85m (largo 5.24m) + B a 1 columna pero
+  // GIRADO (1.30m de ancho, largo 0.90m -> largo total 4.50m), combinados
+  // (0.85+1.30=2.15 <= 2.45) en un único tramo de max(5.24,4.50) = 5.24m.
+  const items = [
+    { id: 1, name: 'A', code: '085x131x125xD', quantity: 7 },
+    { id: 2, name: 'B', code: '090x130x125xD', quantity: 9 },
+  ];
+  const result = packArticles(items, truck);
+  approx(result.totalLength, 5.24, 'combinación óptima real (no la heurística ingenua de 6.52m)');
+  assert.strictEqual(result.bins.length, 1, 'A y B deben caer en el mismo tramo');
+}
+
 // --- toMeters heuristic ---
 {
   approx(toMeters('090'), 0.90, 'toMeters cm');
