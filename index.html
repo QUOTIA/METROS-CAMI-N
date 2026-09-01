@@ -14,7 +14,6 @@
     --accent: #2458d6;
     --accent-hover: #1c46b3;
     --danger: #c0362c;
-    --danger-bg: #fbeae9;
   }
   * { box-sizing: border-box; }
   body {
@@ -34,7 +33,7 @@
     padding: 16px 18px;
   }
   .truck-panel { flex: 0 0 220px; }
-  .orders-panel { flex: 1 1 560px; min-width: 320px; }
+  .articles-panel { flex: 1 1 620px; min-width: 320px; }
   .panel h2 { font-size: 1rem; margin: 0 0 12px; }
   label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
   input[type="text"], input[type="number"] {
@@ -47,31 +46,17 @@
     color: var(--text);
   }
   .field { margin-bottom: 12px; }
-  .order-card {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px;
-    margin-bottom: 16px;
-  }
-  .order-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-  .order-card-header input {
-    font-weight: 600;
-    border: none;
-    background: transparent;
-    padding: 2px 4px;
-    font-size: 0.95rem;
-  }
+  .hint { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th, td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--border); }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 500; font-size: 0.78rem; }
-  td.qty-cell input { width: 70px; }
-  td.code-cell input { width: 100%; min-width: 140px; }
-  .row-actions button, .btn-ghost {
+  td.name-cell input { width: 100%; min-width: 100px; }
+  td.code-cell input { width: 100%; min-width: 150px; }
+  td.qty-cell input { width: 72px; }
+  td.result-cell { font-size: 0.82rem; color: var(--muted); min-width: 220px; }
+  td.result-cell.error { color: var(--danger); }
+  td.result-cell b { color: var(--text); }
+  .row-actions button {
     background: none;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -80,26 +65,18 @@
     color: var(--muted);
     font-size: 0.8rem;
   }
-  .btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-size: 0.85rem; font-weight: 500; }
-  .btn:hover { background: var(--accent-hover); }
-  .btn-secondary { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
-  .btn-secondary:hover { background: #eef2fd; }
-  .order-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  .result-line { margin-top: 4px; font-size: 0.82rem; color: var(--muted); }
-  .result-line.error { color: var(--danger); }
-  .total-box {
-    margin-top: 12px;
-    padding: 10px 12px;
-    background: #eef2fd;
-    border-radius: 8px;
-    font-size: 0.95rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
+  .btn-ghost {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.82rem;
   }
-  .total-box .value { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+  .add-row-btn { margin-top: 12px; }
   .grand-total {
-    margin-top: 4px;
+    margin-top: 16px;
     padding: 14px 18px;
     background: var(--panel);
     border: 1px solid var(--border);
@@ -108,18 +85,15 @@
     justify-content: space-between;
     align-items: baseline;
   }
-  .grand-total .value { font-size: 1.6rem; font-weight: 800; color: var(--text); }
-  .add-order-btn { margin-top: 4px; }
-  .hint { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
-  .detail-toggle { cursor: pointer; color: var(--accent); font-size: 0.78rem; }
-  .detail-box { background: #f8f9fb; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-top: 4px; font-size: 0.78rem; color: var(--muted); display: none; }
-  .detail-box.open { display: block; }
+  .grand-total .value { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+  .detail-toggle { cursor: pointer; }
+  .detail-toggle:hover { color: var(--accent); }
 </style>
 </head>
 <body>
 
 <h1>Calculadora de metros lineales de camión</h1>
-<p class="subtitle">Introduce los pallets de cada pedido con el formato <code>ANCHOxLARGOxALTOxTIPO</code> (p. ej. <code>090X172X141XU</code>) y la cantidad. La app elige la orientación y el apilado que menos largo de camión ocupan.</p>
+<p class="subtitle">Introduce cada artículo con su volumen en formato <code>ANCHOxLARGOxALTOxTIPO</code> (p. ej. <code>090X172X141XU</code>) y la cantidad de pallets. La app elige la orientación y el apilado que menos largo de camión ocupan, y suma el total.</p>
 
 <div class="layout">
   <div class="panel truck-panel">
@@ -139,54 +113,42 @@
     </p>
   </div>
 
-  <div class="orders-panel" id="ordersPanel"></div>
+  <div class="panel articles-panel">
+    <h2>Artículos</h2>
+    <table>
+      <thead>
+        <tr><th>Artículo</th><th>Volumen (AxLxAltoxTipo)</th><th>Pallets</th><th>Resultado</th><th></th></tr>
+      </thead>
+      <tbody id="articlesBody"></tbody>
+    </table>
+    <button class="btn-ghost add-row-btn" id="addRowBtn">+ Añadir artículo</button>
+  </div>
 </div>
 
-<div class="grand-total" id="grandTotal" style="display:none;">
-  <span>Total de todos los pedidos</span>
+<div class="grand-total">
+  <span>Total metros de largo</span>
   <span class="value" id="grandTotalValue">0,00 m</span>
 </div>
 
-<button class="btn btn-secondary add-order-btn" id="addOrderBtn">+ Añadir pedido</button>
-
 <script src="calc.js"></script>
 <script>
-let orderCounter = 0;
-let lineCounter = 0;
-const orders = []; // { id, name, lines: [{id, code, quantity}] }
+let rowCounter = 0;
+const articles = []; // { id, name, code, quantity }
 
-function addOrder() {
-  orderCounter += 1;
-  const order = {
-    id: orderCounter,
-    name: `Pedido ${orderCounter}`,
-    lines: [makeLine(), makeLine()],
-  };
-  orders.push(order);
+function makeRow() {
+  rowCounter += 1;
+  return { id: rowCounter, name: '', code: '', quantity: '' };
+}
+
+function addRow() {
+  articles.push(makeRow());
   render();
 }
 
-function makeLine() {
-  lineCounter += 1;
-  return { id: lineCounter, code: '', quantity: '' };
-}
-
-function removeOrder(orderId) {
-  const idx = orders.findIndex((o) => o.id === orderId);
-  if (idx >= 0) orders.splice(idx, 1);
-  render();
-}
-
-function addLine(orderId) {
-  const order = orders.find((o) => o.id === orderId);
-  order.lines.push(makeLine());
-  render();
-}
-
-function removeLine(orderId, lineId) {
-  const order = orders.find((o) => o.id === orderId);
-  order.lines = order.lines.filter((l) => l.id !== lineId);
-  if (order.lines.length === 0) order.lines.push(makeLine());
+function removeRow(id) {
+  const idx = articles.findIndex((a) => a.id === id);
+  if (idx >= 0) articles.splice(idx, 1);
+  if (articles.length === 0) articles.push(makeRow());
   render();
 }
 
@@ -194,147 +156,11 @@ function fmt(n) {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function computeOrder(order, truck) {
-  const items = order.lines.filter((l) => l.code.trim() !== '' && l.quantity !== '');
-  const results = [];
-  let total = 0;
-  let hasError = false;
-
-  for (const item of items) {
-    const qty = parseInt(item.quantity, 10);
-    try {
-      if (!Number.isFinite(qty) || qty <= 0) {
-        throw new Error('Cantidad inválida');
-      }
-      const lineResult = window.PalletCalc.computeLineResult(item.code, qty, truck);
-      results.push({ line: item, ok: true, result: lineResult });
-      total += lineResult.best.length;
-    } catch (err) {
-      results.push({ line: item, ok: false, error: err.message });
-      hasError = true;
-    }
-  }
-
-  return { results, total, hasError };
-}
-
-function render() {
-  const truck = {
+function getTruck() {
+  return {
     width: parseFloat(document.getElementById('truckWidth').value) || 2.45,
     height: parseFloat(document.getElementById('truckHeight').value) || 2.70,
   };
-
-  const panel = document.getElementById('ordersPanel');
-  panel.innerHTML = '';
-
-  let grandTotal = 0;
-  let anyOrder = orders.length > 0;
-
-  orders.forEach((order) => {
-    const card = document.createElement('div');
-    card.className = 'order-card';
-
-    const header = document.createElement('div');
-    header.className = 'order-card-header';
-    header.innerHTML = `
-      <input type="text" value="${escapeHtml(order.name)}" data-role="order-name" />
-      <div class="row-actions"><button data-role="remove-order">Eliminar pedido</button></div>
-    `;
-    header.querySelector('[data-role="order-name"]').addEventListener('input', (e) => {
-      order.name = e.target.value;
-    });
-    header.querySelector('[data-role="remove-order"]').addEventListener('click', () => removeOrder(order.id));
-    card.appendChild(header);
-
-    const table = document.createElement('table');
-    table.innerHTML = `
-      <thead>
-        <tr><th>Medida (AxLxAltoxTipo)</th><th>Cantidad</th><th></th></tr>
-      </thead>
-      <tbody></tbody>
-    `;
-    const tbody = table.querySelector('tbody');
-
-    order.lines.forEach((line) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="code-cell"><input type="text" placeholder="090X172X141XU" value="${escapeHtml(line.code)}" /></td>
-        <td class="qty-cell"><input type="number" min="1" placeholder="0" value="${escapeHtml(String(line.quantity))}" /></td>
-        <td class="row-actions"><button title="Eliminar fila">✕</button></td>
-      `;
-      const [codeInput, qtyInput] = tr.querySelectorAll('input');
-      codeInput.addEventListener('input', (e) => { line.code = e.target.value; renderResults(); });
-      qtyInput.addEventListener('input', (e) => { line.quantity = e.target.value; renderResults(); });
-      tr.querySelector('button').addEventListener('click', () => removeLine(order.id, line.id));
-      tbody.appendChild(tr);
-    });
-
-    card.appendChild(table);
-
-    const actions = document.createElement('div');
-    actions.className = 'order-actions';
-    actions.innerHTML = `<button class="btn-ghost" data-role="add-line">+ Añadir medida</button>`;
-    actions.querySelector('[data-role="add-line"]').addEventListener('click', () => addLine(order.id));
-    card.appendChild(actions);
-
-    const resultsHost = document.createElement('div');
-    resultsHost.dataset.orderResults = order.id;
-    card.appendChild(resultsHost);
-
-    const totalBox = document.createElement('div');
-    totalBox.className = 'total-box';
-    totalBox.innerHTML = `<span>Largo total del pedido</span><span class="value" data-order-total="${order.id}">0,00 m</span>`;
-    card.appendChild(totalBox);
-
-    panel.appendChild(card);
-  });
-
-  document.getElementById('grandTotal').style.display = anyOrder ? 'flex' : 'none';
-  renderResults();
-}
-
-function renderResults() {
-  const truck = {
-    width: parseFloat(document.getElementById('truckWidth').value) || 2.45,
-    height: parseFloat(document.getElementById('truckHeight').value) || 2.70,
-  };
-
-  let grandTotal = 0;
-
-  orders.forEach((order) => {
-    const { results, total } = computeOrder(order, truck);
-    grandTotal += total;
-
-    const host = document.querySelector(`[data-order-results="${order.id}"]`);
-    if (host) {
-      host.innerHTML = '';
-      results.forEach((r, idx) => {
-        const div = document.createElement('div');
-        if (r.ok) {
-          const b = r.result.best;
-          div.className = 'result-line';
-          div.innerHTML = `
-            <span class="detail-toggle" data-idx="${idx}">${r.line.quantity}x ${r.line.code} → ${fmt(b.length)} m
-            (${b.N} a lo ancho, ${b.description}, ${b.slots} fila(s) de ${fmt(b.lengthDim)} m)</span>
-            <div class="detail-box" data-detail="${idx}">Orientación elegida: ${fmt(b.width)} m a lo ancho x ${fmt(b.lengthDim)} m a lo largo.</div>
-          `;
-          div.querySelector('.detail-toggle').addEventListener('click', (e) => {
-            e.target.parentElement.querySelector('.detail-box').classList.toggle('open');
-          });
-        } else {
-          div.className = 'result-line error';
-          div.textContent = `${r.line.code || '(sin medida)'}: ${r.error}`;
-        }
-        host.appendChild(div);
-      });
-    }
-
-    const totalEl = document.querySelector(`[data-order-total="${order.id}"]`);
-    if (totalEl) totalEl.textContent = `${fmt(total)} m`;
-  });
-
-  const grandTotalValue = document.getElementById('grandTotalValue');
-  if (grandTotalValue) grandTotalValue.textContent = `${fmt(grandTotal)} m`;
 }
 
 function escapeHtml(str) {
@@ -343,11 +169,67 @@ function escapeHtml(str) {
   }[c]));
 }
 
-document.getElementById('addOrderBtn').addEventListener('click', addOrder);
+function render() {
+  const tbody = document.getElementById('articlesBody');
+  tbody.innerHTML = '';
+
+  articles.forEach((article) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="name-cell"><input type="text" placeholder="Ref./nombre" value="${escapeHtml(article.name)}" /></td>
+      <td class="code-cell"><input type="text" placeholder="090X172X141XU" value="${escapeHtml(article.code)}" /></td>
+      <td class="qty-cell"><input type="number" min="1" placeholder="0" value="${escapeHtml(String(article.quantity))}" /></td>
+      <td class="result-cell" data-result="${article.id}"></td>
+      <td class="row-actions"><button title="Eliminar">✕</button></td>
+    `;
+    const [nameInput, codeInput, qtyInput] = tr.querySelectorAll('input');
+    nameInput.addEventListener('input', (e) => { article.name = e.target.value; });
+    codeInput.addEventListener('input', (e) => { article.code = e.target.value; renderResults(); });
+    qtyInput.addEventListener('input', (e) => { article.quantity = e.target.value; renderResults(); });
+    tr.querySelector('button').addEventListener('click', () => removeRow(article.id));
+    tbody.appendChild(tr);
+  });
+
+  renderResults();
+}
+
+function renderResults() {
+  const truck = getTruck();
+  let grandTotal = 0;
+
+  articles.forEach((article) => {
+    const cell = document.querySelector(`[data-result="${article.id}"]`);
+    if (!cell) return;
+
+    if (article.code.trim() === '' || article.quantity === '') {
+      cell.textContent = '';
+      cell.className = 'result-cell';
+      return;
+    }
+
+    const qty = parseInt(article.quantity, 10);
+    try {
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error('Cantidad inválida');
+      const r = window.PalletCalc.computeLineResult(article.code, qty, truck);
+      const b = r.best;
+      grandTotal += b.length;
+      cell.className = 'result-cell';
+      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(b.length)} m</b> (${b.N} a lo ancho, ${b.description}, ${b.slots} fila(s) de ${fmt(b.lengthDim)} m)</span>`;
+    } catch (err) {
+      cell.className = 'result-cell error';
+      cell.textContent = err.message;
+    }
+  });
+
+  document.getElementById('grandTotalValue').textContent = `${fmt(grandTotal)} m`;
+}
+
+document.getElementById('addRowBtn').addEventListener('click', addRow);
 document.getElementById('truckWidth').addEventListener('input', renderResults);
 document.getElementById('truckHeight').addEventListener('input', renderResults);
 
-addOrder();
+articles.push(makeRow(), makeRow(), makeRow());
+render();
 </script>
 </body>
 </html>

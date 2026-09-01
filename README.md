@@ -6,14 +6,16 @@ de camión ocupan los pallets de un pedido.
 ## Uso
 
 Abre `index.html` en el navegador (doble clic, o `python3 -m http.server` y entrar
-a `http://localhost:8000`). Para cada pedido:
+a `http://localhost:8000`). Por cada artículo del pedido:
 
-1. Introduce cada medida de pallet con el formato `ANCHOxLARGOxALTOxTIPO`,
+1. (Opcional) ponle una referencia o nombre.
+2. Introduce su volumen con el formato `ANCHOxLARGOxALTOxTIPO`,
    por ejemplo `090X172X141XU` (medidas en cm) o `0,80x1,20x1,00xP` (medidas en m).
-2. Introduce la cantidad de pallets de esa medida.
-3. Añade tantas medidas como tenga el pedido con "+ Añadir medida".
-4. El total de metros de largo del pedido se actualiza automáticamente. Puedes
-   añadir varios pedidos con "+ Añadir pedido"; abajo se muestra el total conjunto.
+3. Introduce la cantidad de pallets de ese artículo.
+4. Añade tantos artículos como tenga el pedido con "+ Añadir artículo".
+
+El total de metros de largo de todos los artículos se muestra abajo y se
+actualiza automáticamente al escribir.
 
 El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
 de la izquierda por si se usa con otro tipo de camión.
@@ -59,8 +61,8 @@ Para cada medida + cantidad del pedido:
    fila da un resultado mejor si la fila resultante es más profunda (aprovecha
    mejor los "huecos" de la última fila incompleta).
 
-El largo total del pedido es la suma de los largos calculados de cada línea de
-medida distinta (no se mezclan pallets de medidas distintas en la misma fila).
+El largo total del pedido es la suma de los largos calculados de cada artículo
+por separado (no se mezclan artículos de medidas distintas en la misma fila).
 
 ## Archivos
 
