@@ -88,6 +88,37 @@
   .grand-total .value { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
   .detail-toggle { cursor: pointer; }
   .detail-toggle:hover { color: var(--accent); }
+
+  .diagram-panel { margin-top: 16px; }
+  .diagram-panel h2 { font-size: 1rem; margin: 0 0 4px; }
+  .diagram-panel .diagram-hint { color: var(--muted); font-size: 0.78rem; margin: 0 0 12px; }
+  .diagram-scroll { overflow-x: auto; }
+  .truck-diagram {
+    display: block;
+    width: 100%;
+    min-width: 520px;
+    height: auto;
+    background: #fbfbfc;
+    border-radius: 4px;
+  }
+  .truck-outline { fill: none; stroke: var(--text); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .pallet-cell { stroke: #ffffff; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .pallet-cell.empty { stroke: var(--border); stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+  .pyramid-top { stroke: #ffffff; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .cell-badge { font-size: 0.11px; fill: #ffffff; font-weight: 700; }
+  .slot-divider { stroke: #ffffff; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: 0.8; }
+  .article-divider { stroke: var(--text); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .unused-width {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 4;
+    vector-effect: non-scaling-stroke;
+  }
+  .diagram-empty { color: var(--muted); font-size: 0.85rem; padding: 20px 0; text-align: center; }
+  .diagram-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); }
+  .legend-item i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
 </style>
 </head>
 <body>
@@ -130,7 +161,14 @@
   <span class="value" id="grandTotalValue">0,00 m</span>
 </div>
 
+<div class="panel diagram-panel">
+  <h2>Disposición en el camión</h2>
+  <p class="diagram-hint">Vista en planta (desde arriba). Cada color es un artículo; los recuadros claros discontinuos son hueco de ancho sin usar.</p>
+  <div class="diagram-scroll" id="diagramHost"></div>
+</div>
+
 <script src="calc.js"></script>
+<script src="diagram.js"></script>
 <script>
 let rowCounter = 0;
 const articles = []; // { id, name, code, quantity }
@@ -196,6 +234,7 @@ function render() {
 function renderResults() {
   const truck = getTruck();
   let grandTotal = 0;
+  const diagramLines = [];
 
   articles.forEach((article) => {
     const cell = document.querySelector(`[data-result="${article.id}"]`);
@@ -215,13 +254,16 @@ function renderResults() {
       grandTotal += b.length;
       cell.className = 'result-cell';
       cell.innerHTML = `<span class="detail-toggle"><b>${fmt(b.length)} m</b> (${b.N} a lo ancho, ${b.description}, ${b.slots} fila(s) de ${fmt(b.lengthDim)} m)</span>`;
+      diagramLines.push({ name: article.name, code: article.code, ok: true, result: r });
     } catch (err) {
       cell.className = 'result-cell error';
       cell.textContent = err.message;
+      diagramLines.push({ name: article.name, code: article.code, ok: false });
     }
   });
 
   document.getElementById('grandTotalValue').textContent = `${fmt(grandTotal)} m`;
+  window.renderTruckDiagram(document.getElementById('diagramHost'), diagramLines, truck);
 }
 
 document.getElementById('addRowBtn').addEventListener('click', addRow);

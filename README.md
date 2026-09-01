@@ -15,7 +15,11 @@ a `http://localhost:8000`). Por cada artículo del pedido:
 4. Añade tantos artículos como tenga el pedido con "+ Añadir artículo".
 
 El total de metros de largo de todos los artículos se muestra abajo y se
-actualiza automáticamente al escribir.
+actualiza automáticamente al escribir. Debajo del total se dibuja un esquema
+en planta (vista desde arriba) del camión con la disposición real de los
+pallets: cada artículo tiene un color, cada recuadro es un pallet (o una
+columna apilada, con un `×N` si lleva varios niveles), y las zonas discontinuas
+marcan hueco de ancho o de pirámide sin usar.
 
 El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
 de la izquierda por si se usa con otro tipo de camión.
@@ -69,6 +73,8 @@ por separado (no se mezclan artículos de medidas distintas en la misma fila).
 - `index.html` — interfaz.
 - `calc.js` — lógica de cálculo (reutilizable, sin dependencias del DOM).
 - `calc.test.js` — pruebas de la lógica (`node calc.test.js`).
+- `diagram.js` — dibuja el esquema en planta (SVG) de la disposición en el camión.
+- `diagram.test.js` — pruebas del reparto de pallets por columnas (`node diagram.test.js`).
 
 ## Supuestos de negocio (a confirmar si cambian las reglas reales)
 
