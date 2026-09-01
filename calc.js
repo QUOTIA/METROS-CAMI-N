@@ -163,11 +163,14 @@ function packHeightsFFD(pool, truckHeight) {
 }
 
 // Combina varios artículos que comparten EXACTAMENTE la misma base (ancho x
-// largo) en un único bloque: sus pallets se reparten libremente entre las N
-// columnas a lo ancho (mezclando referencias distintas en la misma columna,
-// una encima de otra, mientras quepan en altura) y, si N >= 2, también en
-// los N-1 huecos "nesteados" de tipo pirámide entre columnas (un pallet
-// suelto de cualquier referencia, sin más apilado encima). Se calcula el
+// largo) en un único bloque. Los pallets de tipo P forman primero tantas
+// pirámides completas (N en la base + (N-1) encima) como se pueda con la
+// cantidad disponible — esa es su disposición natural, no una pila directa.
+// El resto (pallets D, y los P sueltos que no llegan a completar una
+// pirámide) se reparten libremente entre las N columnas a lo ancho,
+// mezclando referencias distintas en la misma columna una encima de otra
+// mientras quepan en altura, y usando los N-1 huecos "nesteados" que
+// sobren entre columnas para algún pallet suelto adicional. Se calcula el
 // menor número de filas necesario para colocar todos los pallets del grupo.
 //
 // articles = [{ id, name, code, quantity, pallet }] (misma huella entre sí)
@@ -175,10 +178,12 @@ function packFootprintFamily(articles, truck) {
   const { dimA, dimB } = articles[0].pallet;
   const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
 
-  const pool = [];
+  const pPool = [];
+  const otherPool = [];
   for (const art of articles) {
+    const bucket = art.pallet.type === 'P' ? pPool : otherPool;
     for (let i = 0; i < art.quantity; i++) {
-      pool.push({ id: art.id, name: art.name, code: art.code, height: art.pallet.height });
+      bucket.push({ id: art.id, name: art.name, code: art.code, height: art.pallet.height });
     }
   }
 
@@ -187,31 +192,45 @@ function packFootprintFamily(articles, truck) {
     const N = floorDiv(truck.width, width);
     if (N < 1) continue;
 
-    const bins = packHeightsFFD(pool, truck.height);
+    const pyramidGroupSize = N >= 2 ? 2 * N - 1 : 0;
+    const numPyramidRows = pyramidGroupSize > 0 ? Math.floor(pPool.length / pyramidGroupSize) : 0;
+
+    const remainingP = [...pPool];
+    const pyramidGroups = [];
+    for (let r = 0; r < numPyramidRows; r++) {
+      const groupItems = remainingP.splice(0, pyramidGroupSize);
+      pyramidGroups.push({ base: groupItems.slice(0, N), top: groupItems.slice(N) });
+    }
+
+    // Los P que no llegan a completar una pirámide se apilan como si fueran D.
+    const leftoverPool = [...otherPool, ...remainingP];
+
+    const bins = packHeightsFFD(leftoverPool, truck.height);
     const singles = bins.filter((b) => b.items.length === 1);
     const nonSingles = bins.filter((b) => b.items.length > 1);
 
-    let chosenRows = bins.length; // cota superior segura (sin usar nesteado)
+    let plainRows = leftoverPool.length === 0 ? 0 : bins.length; // cota superior segura
     for (let r = 1; r <= bins.length; r++) {
       const nestedCapacity = r * Math.max(0, N - 1);
       const leftoverSingles = Math.max(0, singles.length - nestedCapacity);
       const columnBinsNeeded = nonSingles.length + leftoverSingles;
       if (columnBinsNeeded <= r * N) {
-        chosenRows = r;
+        plainRows = r;
         break;
       }
     }
 
-    const nestedCapacity = chosenRows * Math.max(0, N - 1);
+    const nestedCapacity = plainRows * Math.max(0, N - 1);
     const offloadCount = Math.min(singles.length, nestedCapacity);
     const nestedItems = singles.slice(0, offloadCount).map((b) => b.items[0]);
     const columnBins = [...nonSingles, ...singles.slice(offloadCount)].map((b) => b.items);
 
-    const length = chosenRows * lengthDim;
+    const rows = numPyramidRows + plainRows;
+    const length = rows * lengthDim;
     const usedWidth = N * width;
 
     if (!best || length < best.length - EPS) {
-      best = { width, lengthDim, N, rows: chosenRows, length, usedWidth, columnBins, nestedItems, isFamily: true };
+      best = { width, lengthDim, N, rows, length, usedWidth, pyramidGroups, columnBins, nestedItems, isFamily: true };
     }
   }
 

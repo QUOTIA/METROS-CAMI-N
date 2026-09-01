@@ -113,21 +113,32 @@ puede ser bastante menor que la suma de sus largos por separado.
 Cuando dos o más artículos comparten EXACTAMENTE la misma base (mismo ancho x
 largo, en cualquier orden; la altura y el tipo de apilado pueden ser
 distintos), la app va un paso más allá de "compartir tramo lado a lado": los
-trata como un único bloque y reparte sus pallets libremente entre:
+trata como un único bloque en dos etapas:
 
-- Las columnas a lo ancho (hasta N, según la base) — cada columna puede
-  llevar pallets de referencias distintas apiladas una encima de otra,
-  mientras la suma de sus alturas quepa en el camión.
-- Los huecos "nesteados" de tipo pirámide entre columnas (N-1 por fila) — un
-  pallet suelto de cualquiera de las referencias, si no sobresale.
+1. **Pirámides completas primero.** Los pallets de tipo P forman, con su
+   propia cantidad, tantas filas piramidales completas (base de N + (N-1)
+   encima) como se pueda — esa es su disposición natural, no una pila
+   directa. Por ejemplo, con 6 pallets P y N=3, se forma 1 pirámide completa
+   (3+2=5) y queda 1 P suelto.
+2. **El resto, apilado por altura.** Los pallets D, más los P sueltos que no
+   llegan a completar una pirámide (se apilan entonces como si fueran D),
+   se reparten libremente en filas normales entre:
+   - Las columnas a lo ancho (hasta N) — cada columna puede llevar pallets
+     de referencias distintas apiladas una encima de otra, mientras la suma
+     de sus alturas quepa en el camión.
+   - Los huecos "nesteados" de tipo pirámide entre columnas (N-1 por fila),
+     para algún pallet suelto adicional que no complete pareja en ninguna
+     columna.
 
-El reparto usa un algoritmo de empaquetado por alturas (First-Fit-Decreasing):
-ordena todos los pallets de mayor a menor altura y va llenando columnas; los
-que quedan sueltos (no completan pareja en ninguna columna) se mandan a los
-huecos de pirámide si hay sitio. Se calcula así el menor número de filas
-posible para colocar todos los pallets de las referencias combinadas. En el
-diagrama, una misma casilla puede mostrar dos colores (dos referencias)
-apiladas — es intencional: significa que ahí caben pallets de ambas.
+   El reparto de esta segunda etapa usa un algoritmo de empaquetado por
+   alturas (First-Fit-Decreasing): ordena los pallets de mayor a menor altura
+   y va llenando columnas; los que quedan sueltos se mandan a los huecos de
+   pirámide si hay sitio.
+
+Se calcula así el menor número de filas posible para colocar todos los
+pallets de las referencias combinadas. En el diagrama, una misma casilla
+puede mostrar dos colores (dos referencias) apiladas — es intencional:
+significa que ahí caben pallets de ambas.
 
 Esto no es una búsqueda exhaustiva de todas las formas de repartir alturas
 (sería un problema de empaquetado en contenedores, NP-difícil en general),

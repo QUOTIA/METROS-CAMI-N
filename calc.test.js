@@ -119,30 +119,47 @@ function approx(a, b, msg) {
 }
 
 // --- packArticles: artículos con la MISMA base (huella) se combinan en un
-// único bloque, mezclando referencias distintas en la misma columna y en
-// los huecos de pirámide, no solo lado a lado ---
+// único bloque. Los P forman primero pirámides completas (su disposición
+// natural); el resto (D y los P sueltos que no completan pirámide) se
+// apilan en filas normales, mezclando referencias en la misma columna ---
 {
   // Las tres referencias comparten base 0.80x1.20:
   // ref1: P, altura 0.92, 6 uds. ref2: D, altura 1.00, 3 uds. ref3: D, altura 1.35, 2 uds.
-  // Sin combinar por altura (una columna por referencia): 1.60 + 1.20 = 2.80m.
-  // Combinando alturas en columnas + huecos de pirámide: 3 columnas de 0.80m
-  // (2.40m de ancho), reparto por alturas (FFD) da 6 "pilas": dos de 1.35+1.35,
-  // 1.00+1.00, 1.00+0.92, 0.92+0.92, 0.92+0.92, y una suelta de 0.92 que cabe
-  // en un hueco de pirámide -> 2 filas de 1.20m = 2.40m.
+  // Sin combinar (una columna por referencia): 1.60 + 1.20 = 2.80m.
+  // Combinado: 1 fila en pirámide (3 base + 2 encima, las 5 primeras de ref1)
+  // + 1 fila normal con el resto (2×ref3, 3×ref2, 1×ref1 sobrante) repartido
+  // en 3 columnas de 2 -> 2 filas de 1.20m = 2.40m.
   const items = [
     { id: 1, name: 'ref1', code: '080x120x092xP', quantity: 6 },
     { id: 2, name: 'ref2', code: '080x120x100xD', quantity: 3 },
     { id: 3, name: 'ref3', code: '080x120x135xD', quantity: 2 },
   ];
   const result = packArticles(items, truck);
-  approx(result.totalLength, 2.40, 'combinación por huella compartida (mezcla en la misma columna)');
+  approx(result.totalLength, 2.40, 'combinación por huella compartida');
   assert.strictEqual(result.bins.length, 1, 'las tres referencias caen en el mismo bloque');
   const placement = result.bins[0].items[0];
   assert.ok(placement.isFamily, 'el bloque combinado debe marcarse como familia de huella compartida');
   assert.strictEqual(placement.members.length, 3, 'las tres referencias deben ser miembros de la familia');
+
+  const opt = placement.option;
+  assert.strictEqual(opt.pyramidGroups.length, 1, 'debe formarse 1 fila piramidal completa');
+  const pyramid = opt.pyramidGroups[0];
+  assert.strictEqual(pyramid.base.length, 3, 'la base de la pirámide es de 3');
+  assert.strictEqual(pyramid.top.length, 2, 'encima de la pirámide van 2');
+  assert.ok(
+    [...pyramid.base, ...pyramid.top].every((p) => p.id === 1),
+    'la pirámide se forma solo con la referencia P (ref1)'
+  );
+
   const totalPalletsPlaced =
-    placement.option.columnBins.reduce((sum, col) => sum + col.length, 0) + placement.option.nestedItems.length;
+    pyramid.base.length + pyramid.top.length +
+    opt.columnBins.reduce((sum, col) => sum + col.length, 0) + opt.nestedItems.length;
   assert.strictEqual(totalPalletsPlaced, 11, 'los 11 pallets (6+3+2) deben quedar todos colocados');
+
+  // El pallet suelto de ref1 (el 6º, que no entra en la pirámide) debe
+  // aparecer apilado en una de las columnas de la fila normal.
+  const leftoverInPlainRow = opt.columnBins.some((col) => col.some((p) => p.id === 1));
+  assert.ok(leftoverInPlainRow, 'el pallet sobrante de ref1 se apila en la fila normal, no se pierde');
 }
 
 // --- packFootprintFamily: artículos con distinta base NO deben agruparse ---

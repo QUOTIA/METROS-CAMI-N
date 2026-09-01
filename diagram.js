@@ -148,41 +148,68 @@ function drawStackCell(group, x, y, width, lengthDim, stackItems, colorById) {
   labelCell(group, x, y, width, lengthDim);
 }
 
-// Dibuja un bloque combinado (`packFootprintFamily`): varias referencias con
-// la misma base repartidas en columnas y huecos de pirámide, mezclando
-// referencias distintas en la misma columna cuando hace falta.
+function drawNestedRow(group, slotY, N, width, lengthDim, xOffset, items, colorById) {
+  const topW = width * 0.6;
+  const topH = lengthDim * 0.6;
+  for (let c = 0; c < N - 1; c++) {
+    const item = items[c];
+    if (!item) continue;
+    const x = xOffset + (c + 1) * width - topW / 2;
+    const y = slotY + (lengthDim - topH) / 2;
+    group.appendChild(el('rect', {
+      x, y, width: topW, height: topH, class: 'pallet-cell pyramid-top',
+      fill: colorById.get(item.id) || DIAGRAM_PALETTE[0], 'fill-opacity': 0.9,
+    }));
+  }
+}
+
+// Dibuja un bloque combinado (`packFootprintFamily`): primero las filas en
+// pirámide completas (base N + (N-1) encima, todas del mismo tipo P), y a
+// continuación las filas normales que reparten el resto (D y P sueltos)
+// entre columnas, mezclando referencias distintas en la misma columna
+// cuando hace falta.
 function drawFamilyPlacement(svg, placement, yStart, binLength, xOffset, colorById) {
   const group = el('g', {});
-  const { N, width, lengthDim, rows, columnBins, nestedItems } = placement.option;
+  const { N, width, lengthDim, rows, pyramidGroups, columnBins, nestedItems } = placement.option;
 
   for (let r = 0; r < rows; r++) {
     const slotY = yStart + r * lengthDim;
-    const rowBins = columnBins.slice(r * N, (r + 1) * N);
-    for (let c = 0; c < N; c++) {
-      const x = xOffset + c * width;
-      const stackItems = rowBins[c];
-      if (stackItems && stackItems.length > 0) {
-        drawStackCell(group, x, slotY, width, lengthDim, stackItems, colorById);
-      } else {
-        group.appendChild(el('rect', {
-          x, y: slotY, width, height: lengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
-        }));
-      }
-    }
 
-    if (N >= 2) {
-      const rowNested = nestedItems.slice(r * (N - 1), (r + 1) * (N - 1));
-      const topW = width * 0.6;
-      const topH = lengthDim * 0.6;
-      for (let c = 0; c < N - 1; c++) {
-        const item = rowNested[c];
-        if (!item) continue;
-        const x = xOffset + (c + 1) * width - topW / 2;
-        const y = slotY + (lengthDim - topH) / 2;
-        group.appendChild(el('rect', {
-          x, y, width: topW, height: topH, class: 'pallet-cell pyramid-top',
-          fill: colorById.get(item.id) || DIAGRAM_PALETTE[0], 'fill-opacity': 0.9,
-        }));
+    if (r < pyramidGroups.length) {
+      const { base, top } = pyramidGroups[r];
+      for (let c = 0; c < N; c++) {
+        const x = xOffset + c * width;
+        const item = base[c];
+        if (item) {
+          group.appendChild(el('rect', {
+            x, y: slotY, width, height: lengthDim, class: 'pallet-cell',
+            fill: colorById.get(item.id) || DIAGRAM_PALETTE[0], 'fill-opacity': 0.55,
+          }));
+          labelCell(group, x, slotY, width, lengthDim);
+        } else {
+          group.appendChild(el('rect', {
+            x, y: slotY, width, height: lengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+          }));
+        }
+      }
+      if (N >= 2) drawNestedRow(group, slotY, N, width, lengthDim, xOffset, top, colorById);
+    } else {
+      const plainRow = r - pyramidGroups.length;
+      const rowBins = columnBins.slice(plainRow * N, (plainRow + 1) * N);
+      for (let c = 0; c < N; c++) {
+        const x = xOffset + c * width;
+        const stackItems = rowBins[c];
+        if (stackItems && stackItems.length > 0) {
+          drawStackCell(group, x, slotY, width, lengthDim, stackItems, colorById);
+        } else {
+          group.appendChild(el('rect', {
+            x, y: slotY, width, height: lengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+          }));
+        }
+      }
+      if (N >= 2) {
+        const rowNested = nestedItems.slice(plainRow * (N - 1), (plainRow + 1) * (N - 1));
+        drawNestedRow(group, slotY, N, width, lengthDim, xOffset, rowNested, colorById);
       }
     }
 
