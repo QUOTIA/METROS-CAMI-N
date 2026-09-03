@@ -169,11 +169,16 @@ parecidas.
 ## Transportistas (en preparación)
 
 La ruedita ⚙ junto al título abre un panel de ajustes, oculto del flujo
-normal, con la lista de transportistas (nombre y metros de su camión). Se
-guarda en el navegador (`localStorage`), no en el pedido. De momento solo
-sirve para mantener esos datos; todavía no se usa para nada en el cálculo —
-la idea es, más adelante, comparar el total de metros del pedido contra la
-capacidad de cada transportista para sugerir cuál aprovecha mejor el camión.
+normal, con la lista de transportistas: nombre, largo máximo de su camión y,
+si su camión tiene otro ancho o alto útil distinto del estándar (2,45 x 2,70
+m), esos valores también. Ancho/alto en blanco significan "camión estándar".
+Se guarda en el navegador (`localStorage`), no en el pedido. Incluye de
+partida a los 8 transportistas ya dados de alta y un camión aparte de
+medidas distintas (4,20 x 2,10 x 2,00 m) para cuando haga falta. De momento
+solo sirve para mantener esos datos; todavía no se usa para nada en el
+cálculo — la idea es, más adelante, comparar el total de metros del pedido
+(recalculado con el ancho/alto de cada camión) contra su largo máximo para
+sugerir cuál transportista aprovecha mejor el camión.
 
 ## Archivos
 

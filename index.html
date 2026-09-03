@@ -55,7 +55,7 @@
     border-radius: 10px;
     padding: 20px 22px;
     width: 100%;
-    max-width: 480px;
+    max-width: 560px;
     max-height: 80vh;
     overflow-y: auto;
   }
@@ -65,6 +65,9 @@
   .carriers-table th, .carriers-table td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--border); }
   .carriers-table th { color: var(--muted); font-weight: 500; font-size: 0.78rem; }
   .carriers-table input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; }
+  .carriers-table td:nth-child(2), .carriers-table td:nth-child(3), .carriers-table td:nth-child(4) { width: 82px; }
+  .carriers-table input { text-align: center; }
+  .carriers-table td:first-child input { text-align: left; }
   .carriers-table td:last-child { width: 32px; }
   .layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
   .panel {
@@ -198,10 +201,10 @@
       <h2>Transportistas</h2>
       <button type="button" id="closeSettingsBtn" class="icon-btn" title="Cerrar">✕</button>
     </div>
-    <p class="hint">Nombre y metros de camión de cada transportista (déjalo en blanco si aún no lo sabes). Se guarda en este navegador.</p>
+    <p class="hint">Nombre, largo máximo y (si es distinto del camión estándar) ancho y alto del camión de cada transportista. Deja en blanco lo que aún no sepas — ancho/alto vacíos significan "camión estándar" (2,45 x 2,70 m). Se guarda en este navegador.</p>
     <table class="carriers-table">
       <thead>
-        <tr><th>Nombre</th><th>Metros de camión</th><th></th></tr>
+        <tr><th>Nombre</th><th>Largo (m)</th><th>Ancho (m)</th><th>Alto (m)</th><th></th></tr>
       </thead>
       <tbody id="carriersBody"></tbody>
     </table>
@@ -283,30 +286,64 @@ const PALLET_TYPES = ['D', 'P', 'U'];
 // cálculo, solo guarda los datos (en este navegador) hasta que se decida
 // cómo asignar cada pedido a un transportista según los metros que ocupe.
 const CARRIERS_STORAGE_KEY = 'metrosCamion.carriers';
+const SPECIAL_TRUCK_SEEDED_KEY = 'metrosCamion.specialTruckSeeded';
 let carrierIdCounter = 0;
 
+// Camión distinto del estándar (más corto y estrecho): 4,20 m de largo,
+// 2,10 m de ancho útil, 2,00 m de alto útil.
+function makeSpecialTruck() {
+  return { id: ++carrierIdCounter, name: '', maxMeters: '4.2', width: '2.1', height: '2' };
+}
+
 function defaultCarriers() {
-  return ['Iulian', 'Paco', 'Jorge', 'Marc', 'Roberto', 'Juanjo', 'Luis', 'Toni'].map((name) => ({
+  const named = ['Iulian', 'Paco', 'Jorge', 'Marc', 'Roberto', 'Juanjo', 'Luis', 'Toni'].map((name) => ({
     id: ++carrierIdCounter,
     name,
     maxMeters: '',
+    width: '',
+    height: '',
   }));
+  return [...named, makeSpecialTruck()];
 }
 
 function loadCarriers() {
+  let list = null;
   try {
     const raw = localStorage.getItem(CARRIERS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         carrierIdCounter = parsed.reduce((max, c) => Math.max(max, c.id || 0), 0);
-        return parsed;
+        list = parsed;
       }
     }
   } catch (err) {
     // localStorage no disponible o datos corruptos: seguimos con los valores por defecto.
   }
-  return defaultCarriers();
+
+  let seeded = false;
+  try {
+    seeded = !!localStorage.getItem(SPECIAL_TRUCK_SEEDED_KEY);
+  } catch (err) {
+    // Sin acceso a localStorage: no hay nada que migrar de una carga anterior.
+  }
+  if (seeded) return list || defaultCarriers();
+
+  // Primera carga con esta versión: si ya había transportistas guardados de
+  // antes de que existiera el camión especial, se añade una única vez — no
+  // reaparece en cargas futuras aunque el usuario lo borre después.
+  if (!list) {
+    list = defaultCarriers();
+  } else {
+    list.push(makeSpecialTruck());
+  }
+  try {
+    localStorage.setItem(CARRIERS_STORAGE_KEY, JSON.stringify(list));
+    localStorage.setItem(SPECIAL_TRUCK_SEEDED_KEY, '1');
+  } catch (err) {
+    // Si no se puede persistir, se reintentará en la próxima carga.
+  }
+  return list;
 }
 
 let carriers = loadCarriers();
@@ -326,12 +363,16 @@ function renderCarriers() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" class="carrier-name" placeholder="Nombre" value="${escapeHtml(carrier.name)}" /></td>
-      <td><input type="text" inputmode="decimal" class="carrier-meters" placeholder="p. ej. 13,60" value="${escapeHtml(carrier.maxMeters)}" /></td>
+      <td><input type="text" inputmode="decimal" class="carrier-meters" placeholder="13,60" value="${escapeHtml(carrier.maxMeters)}" /></td>
+      <td><input type="text" inputmode="decimal" class="carrier-width" placeholder="2,45" value="${escapeHtml(carrier.width || '')}" /></td>
+      <td><input type="text" inputmode="decimal" class="carrier-height" placeholder="2,70" value="${escapeHtml(carrier.height || '')}" /></td>
       <td><button type="button" title="Eliminar">✕</button></td>
     `;
-    const [nameInput, metersInput] = tr.querySelectorAll('input');
+    const [nameInput, metersInput, widthInput, heightInput] = tr.querySelectorAll('input');
     nameInput.addEventListener('input', (e) => { carrier.name = e.target.value; saveCarriers(); });
     metersInput.addEventListener('input', (e) => { carrier.maxMeters = e.target.value; saveCarriers(); });
+    widthInput.addEventListener('input', (e) => { carrier.width = e.target.value; saveCarriers(); });
+    heightInput.addEventListener('input', (e) => { carrier.height = e.target.value; saveCarriers(); });
     tr.querySelector('button').addEventListener('click', () => {
       carriers = carriers.filter((c) => c.id !== carrier.id);
       saveCarriers();
@@ -342,7 +383,7 @@ function renderCarriers() {
 }
 
 function addCarrier() {
-  carriers.push({ id: ++carrierIdCounter, name: '', maxMeters: '' });
+  carriers.push({ id: ++carrierIdCounter, name: '', maxMeters: '', width: '', height: '' });
   saveCarriers();
   renderCarriers();
 }
