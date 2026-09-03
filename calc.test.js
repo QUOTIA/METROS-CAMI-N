@@ -218,11 +218,44 @@ function approx(a, b, msg) {
   );
 }
 
-// --- packArticles: un solo artículo no tiene alternativa que ofrecer ---
+// --- packArticles: un solo artículo SÍ puede tener una segunda disposición
+// distinta con más metros, aunque no se combine con nada más (p. ej. 2
+// columnas de 1,20 m de largo vs. 1 columna de 2,40 m de largo) ---
 {
   const items = [{ id: 1, name: 'Solo', code: '090x120x100xD', quantity: 5 }];
   const result = packArticles(items, truck);
-  assert.strictEqual(result.alternative, null, 'con un único artículo no hay segunda opción distinta');
+  approx(result.totalLength, 1.8, 'mejor disposición: 2 columnas de 1,20 m de ancho, 0,90 m de largo');
+  assert.ok(result.alternative, 'debe existir una segunda disposición distinta para el mismo artículo');
+  assert.ok(
+    result.alternative.totalLength >= result.totalLength - 1e-6,
+    'la alternativa nunca debe medir menos que la mejor opción'
+  );
+}
+
+// --- packArticles: un artículo con una única disposición posible (por
+// tamaño/orientación) no tiene ninguna alternativa que ofrecer ---
+{
+  const items = [{ id: 1, name: 'Solo', code: '240x240x100xU', quantity: 5 }];
+  const result = packArticles(items, truck);
+  assert.strictEqual(result.alternative, null, 'con una única disposición posible no hay segunda opción');
+}
+
+// --- packArticles: caso real reportado — un solo artículo (U, qty 12,
+// 1,20x0,80 m) tiene dos disposiciones que miden EXACTAMENTE lo mismo
+// (2 columnas de 0,80 m de ancho x 6 filas de 1,20 m, o 3 columnas de 1,20 m
+// de ancho x 4 filas de 0,80 m: ambas dan 4,80 m) — deben mostrarse las dos,
+// no solo una ---
+{
+  const items = [{ id: 1, name: 'Solo', code: '120x080x200xU', quantity: 12 }];
+  const result = packArticles(items, truck);
+  approx(result.totalLength, 4.8, 'primera disposición: 4,80 m');
+  assert.ok(result.alternative, 'debe existir una segunda disposición con el mismo empate de metros');
+  approx(result.alternative.totalLength, 4.8, 'la alternativa empata exactamente en metros');
+  assert.notStrictEqual(
+    result.bins[0].items[0].option.N,
+    result.alternative.bins[0].items[0].option.N,
+    'la alternativa debe usar un número de columnas distinto (disposición física distinta)'
+  );
 }
 
 // --- packFootprintFamily: artículos con distinta base NO deben agruparse ---

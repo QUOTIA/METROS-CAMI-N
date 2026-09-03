@@ -228,12 +228,28 @@ function packFootprintFamily(articles, truck) {
   return best;
 }
 
+// Firma de una combinación concreta de opciones (orientación + columnas por
+// artículo del grupo), para distinguir dos disposiciones que casualmente
+// midan lo mismo (p. ej. 2 columnas de 0,80 m de largo y 6 filas frente a 3
+// columnas de 1,20 m de largo y 4 filas: ambas dan 4,80 m con un único
+// artículo, pero son dos formas físicas distintas de colocarlo).
+function comboSignature(indices, combo) {
+  return indices
+    .map((idx, k) => {
+      const opt = combo[k];
+      return `${idx}:${opt.width.toFixed(6)}x${opt.lengthDim.toFixed(6)}xN${opt.N}`;
+    })
+    .join('|');
+}
+
 // Para un grupo de artículos (índices en `prepared`) que compartirían el
 // mismo tramo de largo, prueba TODAS las combinaciones de sus opciones
-// (orientación + columnas) y devuelve la que quepa a lo ancho del camión
-// minimizando el largo del tramo (el mayor largo de los artículos del
-// grupo). Devuelve null si ninguna combinación cabe junta.
-function bestGroupAssignment(indices, prepared, truck) {
+// (orientación + columnas) y devuelve hasta `k` DISTINTAS que quepan a lo
+// ancho del camión, ordenadas de menor a mayor largo del tramo (el mayor
+// largo de los artículos del grupo) — así, aunque dos disposiciones distintas
+// midan exactamente lo mismo, ambas quedan disponibles para el resto de la
+// búsqueda en vez de quedarse solo con la primera que se encontró.
+function bestGroupAssignmentTopK(indices, prepared, truck, k) {
   let combos = [[]];
   for (const idx of indices) {
     const next = [];
@@ -243,14 +259,25 @@ function bestGroupAssignment(indices, prepared, truck) {
     combos = next;
   }
 
-  let best = null;
+  const valid = [];
   for (const combo of combos) {
     const totalWidth = combo.reduce((sum, opt) => sum + opt.usedWidth, 0);
     if (totalWidth > truck.width + EPS) continue;
     const length = combo.reduce((max, opt) => Math.max(max, opt.length), 0);
-    if (!best || length < best.length - EPS) best = { length, combo };
+    valid.push({ length, combo });
   }
-  return best;
+  valid.sort((a, b) => a.length - b.length);
+
+  const seen = new Set();
+  const top = [];
+  for (const v of valid) {
+    const sig = comboSignature(indices, v.combo);
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    top.push(v);
+    if (top.length >= k) break;
+  }
+  return top;
 }
 
 function makePlacement(item, option, binIndex) {
@@ -296,13 +323,17 @@ function packArticlesTopK(prepared, truck, maxGroup, k) {
   const fullMask = (1 << n) - 1;
   const groupCache = new Map();
 
-  function getGroupResult(indices) {
+  // Hasta `k` disposiciones DISTINTAS para este grupo concreto de artículos
+  // (no solo la de menor largo), para que un empate de largo entre dos
+  // disposiciones de un mismo artículo/grupo también pueda salir a la luz
+  // como "segunda opción" más adelante.
+  function getGroupResults(indices) {
     let mask = 0;
     for (const idx of indices) mask |= 1 << idx;
     if (groupCache.has(mask)) return groupCache.get(mask);
-    const result = bestGroupAssignment(indices, prepared, truck);
-    groupCache.set(mask, result);
-    return result;
+    const results = bestGroupAssignmentTopK(indices, prepared, truck, k);
+    groupCache.set(mask, results);
+    return results;
   }
 
   // dp[mask] = [{ total, indices, result, remaining, subIndex }, ...] (hasta k, ascendente)
@@ -330,24 +361,27 @@ function packArticlesTopK(prepared, truck, maxGroup, k) {
 
     const candidates = [];
     for (const indices of candidateGroups) {
-      const result = getGroupResult(indices);
-      if (!result) continue;
+      const results = getGroupResults(indices);
+      if (!results.length) continue;
       let groupMask = 0;
       for (const idx of indices) groupMask |= 1 << idx;
       const remaining = mask ^ groupMask;
-      dp[remaining].forEach((sub, subIndex) => {
-        candidates.push({ total: result.length + sub.total, indices, result, remaining, subIndex });
+      results.forEach((result, resultIndex) => {
+        dp[remaining].forEach((sub, subIndex) => {
+          candidates.push({ total: result.length + sub.total, indices, result, resultIndex, remaining, subIndex });
+        });
       });
     }
 
     candidates.sort((a, b) => a.total - b.total);
 
-    // Cada (grupo elegido, sub-solución usada) es una combinación distinta,
-    // aunque el total mida lo mismo que otra — nos quedamos con hasta k.
+    // Cada (grupo elegido, disposición del grupo, sub-solución usada) es una
+    // combinación distinta, aunque el total mida lo mismo que otra — nos
+    // quedamos con hasta k.
     const seen = new Set();
     const top = [];
     for (const c of candidates) {
-      const key = `${c.indices.slice().sort((x, y) => x - y).join(',')}#${c.subIndex}`;
+      const key = `${c.indices.slice().sort((x, y) => x - y).join(',')}#${c.resultIndex}#${c.subIndex}`;
       if (seen.has(key)) continue;
       seen.add(key);
       top.push(c);
@@ -365,19 +399,26 @@ function packArticlesTopK(prepared, truck, maxGroup, k) {
   return dp[fullMask].map((_, idx) => buildBinsFromGroups(reconstruct(fullMask, idx), prepared));
 }
 
-// Firma canónica de una solución (qué ids comparten cada tramo y cuánto mide
-// cada uno), para poder distinguir "de verdad son dos disposiciones
-// distintas" de "es la misma solución que ya vimos".
+// Firma de la disposición física concreta de un artículo/bloque dentro de un
+// tramo (qué ids lleva y con qué orientación/columnas/filas), no solo cuánto
+// mide — dos disposiciones distintas pueden medir exactamente lo mismo (ver
+// `comboSignature`) y no deben confundirse con "la misma solución".
+function placementSignature(item) {
+  const ids = item.isFamily ? item.members.map((m) => m.id) : [item.id];
+  const opt = item.option;
+  const shape = item.isFamily
+    ? `F,rows${opt.rows},N${opt.N},${opt.width.toFixed(4)}x${opt.lengthDim.toFixed(4)}`
+    : `N${opt.N},slots${opt.slots},${opt.width.toFixed(4)}x${opt.lengthDim.toFixed(4)}`;
+  return `${ids.slice().sort((a, b) => a - b).join(',')}:${shape}`;
+}
+
+// Firma canónica de una solución completa (disposición física de cada tramo,
+// no solo qué ids comparten cada uno y cuánto mide), para poder distinguir
+// "de verdad son dos disposiciones distintas" de "es la misma solución que
+// ya vimos" aunque el total mida exactamente lo mismo.
 function solutionSignature(sol) {
   return sol.bins
-    .map((bin) => {
-      const ids = [];
-      for (const item of bin.items) {
-        if (item.isFamily) ids.push(...item.members.map((m) => m.id));
-        else ids.push(item.id);
-      }
-      return `${ids.slice().sort((a, b) => a - b).join(',')}@${bin.length.toFixed(6)}`;
-    })
+    .map((bin) => bin.items.map(placementSignature).sort().join('+') + `@${bin.length.toFixed(6)}`)
     .sort()
     .join('|');
 }

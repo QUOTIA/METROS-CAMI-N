@@ -38,11 +38,14 @@ pallets de dos referencias distintas.
 El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
 de la izquierda por si se usa con otro tipo de camión.
 
-Cuando existe una segunda forma de combinar los artículos que ocupa igual o
-más metros que la mejor opción, se muestra debajo con su propio total y su
+Cuando existe una segunda disposición distinta de la mejor —igual o más
+metros que la mejor opción—, se muestra debajo con su propio total y su
 propio diagrama, bajo el título "Segunda opción de colocación" (indica si
-mide lo mismo o más que la primera). Si solo hay una forma razonable de
-combinarlos, esta sección no aparece.
+mide lo mismo o más que la primera). Esto no requiere varios artículos: un
+único artículo también puede tener dos disposiciones físicas distintas que
+midan exactamente lo mismo (p. ej. 3 pallets a lo ancho x 4 filas frente a 2
+a lo ancho x 6 filas) y ambas se muestran. Si solo hay una forma razonable de
+colocarlos, esta sección no aparece.
 
 ## Formato de medida
 
@@ -109,9 +112,13 @@ de otro:
    combinaciones crece demasiado para calcularlas todas al instante).
 3. El largo total del pedido es la suma de los largos de todos los tramos
    resultantes.
-4. La misma búsqueda guarda también la segunda mejor partición DISTINTA (no
-   una variante trivial de la primera) para mostrarla como "segunda opción
-   de colocación" si el pedido tiene más de un artículo.
+4. La misma búsqueda guarda también, para cada artículo o grupo, hasta dos
+   disposiciones DISTINTAS (no solo la de menor largo) — así, si un artículo
+   por sí solo tiene dos formas de colocarse que miden exactamente lo mismo
+   (p. ej. 3 columnas de un largo o 2 columnas de otro largo, dando el mismo
+   total), o si dos particiones distintas del pedido dan el mismo total o
+   uno mayor, esa segunda disposición queda disponible para mostrarla como
+   "segunda opción de colocación".
 
 Por ejemplo, dos artículos que "en solitario" ocupan cada uno 2 columnas y no
 caben juntos (sus anchos naturales suman más de 2,45 m) sí pueden caber
