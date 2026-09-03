@@ -166,6 +166,15 @@ Esto no es una búsqueda exhaustiva de todas las formas de repartir alturas
 pero cubre bien el caso típico de referencias con bases idénticas y alturas
 parecidas.
 
+## Transportistas (en preparación)
+
+La ruedita ⚙ junto al título abre un panel de ajustes, oculto del flujo
+normal, con la lista de transportistas (nombre y metros de su camión). Se
+guarda en el navegador (`localStorage`), no en el pedido. De momento solo
+sirve para mantener esos datos; todavía no se usa para nada en el cálculo —
+la idea es, más adelante, comparar el total de metros del pedido contra la
+capacidad de cada transportista para sugerir cuál aprovecha mejor el camión.
+
 ## Archivos
 
 - `index.html` — interfaz.

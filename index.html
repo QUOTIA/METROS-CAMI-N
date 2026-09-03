@@ -25,6 +25,47 @@
   }
   h1 { font-size: 1.4rem; margin: 0 0 4px; }
   .subtitle { color: var(--muted); margin: 0 0 20px; font-size: 0.9rem; }
+  .header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .icon-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 34px;
+    height: 34px;
+    line-height: 1;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--muted);
+    flex: 0 0 auto;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 24, 32, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-overlay[hidden] { display: none; }
+  .modal {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 20px 22px;
+    width: 100%;
+    max-width: 480px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .modal-header h2 { font-size: 1.05rem; margin: 0; }
+  .carriers-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 12px; }
+  .carriers-table th, .carriers-table td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--border); }
+  .carriers-table th { color: var(--muted); font-weight: 500; font-size: 0.78rem; }
+  .carriers-table input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; }
+  .carriers-table td:last-child { width: 32px; }
   .layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
   .panel {
     background: var(--panel);
@@ -143,8 +184,30 @@
 </head>
 <body>
 
-<h1>Calculadora de metros lineales de camión</h1>
-<p class="subtitle">Introduce el ancho, largo y alto del pallet de cada artículo (en cm o en metros), marca su tipo de apilado (D/P/U) y la cantidad. La app elige la orientación y el apilado que menos largo de camión ocupan, combinando artículos distintos en el mismo tramo de ancho cuando caben juntos, para minimizar el total.</p>
+<div class="header-row">
+  <div>
+    <h1>Calculadora de metros lineales de camión</h1>
+    <p class="subtitle">Introduce el ancho, largo y alto del pallet de cada artículo (en cm o en metros), marca su tipo de apilado (D/P/U) y la cantidad. La app elige la orientación y el apilado que menos largo de camión ocupan, combinando artículos distintos en el mismo tramo de ancho cuando caben juntos, para minimizar el total.</p>
+  </div>
+  <button type="button" id="settingsBtn" class="icon-btn" title="Transportistas">⚙</button>
+</div>
+
+<div class="modal-overlay" id="settingsModal" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Transportistas</h2>
+      <button type="button" id="closeSettingsBtn" class="icon-btn" title="Cerrar">✕</button>
+    </div>
+    <p class="hint">Nombre y metros de camión de cada transportista (déjalo en blanco si aún no lo sabes). Se guarda en este navegador.</p>
+    <table class="carriers-table">
+      <thead>
+        <tr><th>Nombre</th><th>Metros de camión</th><th></th></tr>
+      </thead>
+      <tbody id="carriersBody"></tbody>
+    </table>
+    <button type="button" class="btn-ghost" id="addCarrierBtn">+ Añadir transportista</button>
+  </div>
+</div>
 
 <div class="layout">
   <div class="panel truck-panel">
@@ -214,6 +277,94 @@
 let rowCounter = 0;
 const articles = []; // { id, name, width, length, height, type, quantity }
 const PALLET_TYPES = ['D', 'P', 'U'];
+
+// --- Transportistas (nombre + metros de camión) --------------------------
+// Panel de ajustes oculto tras la ruedita: aún no se usa para nada en el
+// cálculo, solo guarda los datos (en este navegador) hasta que se decida
+// cómo asignar cada pedido a un transportista según los metros que ocupe.
+const CARRIERS_STORAGE_KEY = 'metrosCamion.carriers';
+let carrierIdCounter = 0;
+
+function defaultCarriers() {
+  return ['Iulian', 'Paco', 'Jorge', 'Marc', 'Roberto', 'Juanjo', 'Luis', 'Toni'].map((name) => ({
+    id: ++carrierIdCounter,
+    name,
+    maxMeters: '',
+  }));
+}
+
+function loadCarriers() {
+  try {
+    const raw = localStorage.getItem(CARRIERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        carrierIdCounter = parsed.reduce((max, c) => Math.max(max, c.id || 0), 0);
+        return parsed;
+      }
+    }
+  } catch (err) {
+    // localStorage no disponible o datos corruptos: seguimos con los valores por defecto.
+  }
+  return defaultCarriers();
+}
+
+let carriers = loadCarriers();
+
+function saveCarriers() {
+  try {
+    localStorage.setItem(CARRIERS_STORAGE_KEY, JSON.stringify(carriers));
+  } catch (err) {
+    // Si el navegador bloquea localStorage, los cambios solo duran la sesión.
+  }
+}
+
+function renderCarriers() {
+  const tbody = document.getElementById('carriersBody');
+  tbody.innerHTML = '';
+  carriers.forEach((carrier) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" class="carrier-name" placeholder="Nombre" value="${escapeHtml(carrier.name)}" /></td>
+      <td><input type="text" inputmode="decimal" class="carrier-meters" placeholder="p. ej. 13,60" value="${escapeHtml(carrier.maxMeters)}" /></td>
+      <td><button type="button" title="Eliminar">✕</button></td>
+    `;
+    const [nameInput, metersInput] = tr.querySelectorAll('input');
+    nameInput.addEventListener('input', (e) => { carrier.name = e.target.value; saveCarriers(); });
+    metersInput.addEventListener('input', (e) => { carrier.maxMeters = e.target.value; saveCarriers(); });
+    tr.querySelector('button').addEventListener('click', () => {
+      carriers = carriers.filter((c) => c.id !== carrier.id);
+      saveCarriers();
+      renderCarriers();
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function addCarrier() {
+  carriers.push({ id: ++carrierIdCounter, name: '', maxMeters: '' });
+  saveCarriers();
+  renderCarriers();
+}
+
+function openSettings() {
+  renderCarriers();
+  document.getElementById('settingsModal').hidden = false;
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').hidden = true;
+}
+
+document.getElementById('settingsBtn').addEventListener('click', openSettings);
+document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
+document.getElementById('addCarrierBtn').addEventListener('click', addCarrier);
+document.getElementById('settingsModal').addEventListener('click', (e) => {
+  if (e.target.id === 'settingsModal') closeSettings();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !document.getElementById('settingsModal').hidden) closeSettings();
+});
 
 function makeRow() {
   rowCounter += 1;
