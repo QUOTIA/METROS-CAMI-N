@@ -38,6 +38,12 @@ pallets de dos referencias distintas.
 El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
 de la izquierda por si se usa con otro tipo de camión.
 
+Cuando existe una segunda forma de combinar los artículos que ocupa igual o
+más metros que la mejor opción, se muestra debajo con su propio total y su
+propio diagrama, bajo el título "Segunda opción de colocación" (indica si
+mide lo mismo o más que la primera). Si solo hay una forma razonable de
+combinarlos, esta sección no aparece.
+
 ## Formato de medida
 
 Cada artículo tiene tres casillas de medida (ancho, largo, alto) y un
@@ -103,6 +109,9 @@ de otro:
    combinaciones crece demasiado para calcularlas todas al instante).
 3. El largo total del pedido es la suma de los largos de todos los tramos
    resultantes.
+4. La misma búsqueda guarda también la segunda mejor partición DISTINTA (no
+   una variante trivial de la primera) para mostrarla como "segunda opción
+   de colocación" si el pedido tiene más de un artículo.
 
 Por ejemplo, dos artículos que "en solitario" ocupan cada uno 2 columnas y no
 caben juntos (sus anchos naturales suman más de 2,45 m) sí pueden caber

@@ -105,6 +105,10 @@
   .diagram-panel { margin-top: 16px; }
   .diagram-panel h2 { font-size: 1rem; margin: 0 0 4px; }
   .diagram-panel .diagram-hint { color: var(--muted); font-size: 0.78rem; margin: 0 0 12px; }
+  .alt-panel { border-style: dashed; }
+  .alt-panel h2 { color: var(--muted); }
+  .alt-total { margin: 0 0 14px; padding: 10px 14px; }
+  .alt-total .value { font-size: 1.2rem; font-weight: 700; color: var(--muted); }
   .diagram-scroll { overflow-x: auto; text-align: center; }
   .truck-diagram {
     display: block;
@@ -189,6 +193,16 @@
   <h2>Disposición en el camión</h2>
   <p class="diagram-hint">Vista en planta, camión de arriba (cabecera) a abajo (puertas). Cada color es un artículo/referencia; cada pallet lleva su ancho (borde superior) y su largo (borde lateral) en metros; los recuadros discontinuos son hueco sin usar.</p>
   <div class="diagram-scroll" id="diagramHost"></div>
+</div>
+
+<div class="panel diagram-panel alt-panel" id="altPanel" hidden>
+  <h2 id="altTitle">Segunda opción de colocación</h2>
+  <p class="diagram-hint">Otra forma de combinar los mismos artículos, distinta a la de arriba.</p>
+  <div class="grand-total alt-total">
+    <span>Total metros de largo (opción 2)</span>
+    <span class="value" id="altTotalValue">0,00 m</span>
+  </div>
+  <div class="diagram-scroll" id="diagramHostAlt"></div>
 </div>
 
 <script src="calc.js"></script>
@@ -346,6 +360,20 @@ function renderResults() {
 
   const orderedIds = validItems.map((item) => item.id);
   window.renderTruckDiagram(document.getElementById('diagramHost'), packResult, truck, orderedIds);
+
+  const altPanel = document.getElementById('altPanel');
+  if (packResult && packResult.alternative) {
+    const alt = packResult.alternative;
+    const sameLength = Math.abs(alt.totalLength - packResult.totalLength) < 0.005;
+    altPanel.hidden = false;
+    document.getElementById('altTitle').textContent = sameLength
+      ? 'Segunda opción de colocación (mismos metros)'
+      : 'Segunda opción de colocación (más metros de camión)';
+    document.getElementById('altTotalValue').textContent = `${fmt(alt.totalLength)} m`;
+    window.renderTruckDiagram(document.getElementById('diagramHostAlt'), alt, truck, orderedIds);
+  } else {
+    altPanel.hidden = true;
+  }
 }
 
 document.getElementById('addRowBtn').addEventListener('click', addRow);

@@ -282,13 +282,16 @@ function buildBinsFromGroups(groups, prepared) {
   return { bins, placements, totalLength };
 }
 
-// Busca la partición ÓPTIMA de los artículos en tramos (grupos de hasta
-// `maxGroup` artículos que comparten tramo), minimizando la suma de los
-// largos de cada tramo. Programación dinámica sobre subconjuntos (bitmask):
-// dp[mask] = menor largo total para cubrir exactamente los artículos de
-// `mask`. Cada grupo candidato se evalúa una sola vez (memoizado por su
-// máscara) aunque aparezca en muchos subproblemas.
-function packArticlesExact(prepared, truck, maxGroup) {
+// Busca las `k` mejores particiones DISTINTAS de los artículos en tramos
+// (grupos de hasta `maxGroup` artículos que comparten tramo), ordenadas de
+// menor a mayor largo total. Programación dinámica sobre subconjuntos
+// (bitmask) generalizada a "k mejores": dp[mask] guarda hasta `k` formas
+// distintas de cubrir `mask` (no solo la óptima), cada una identificada por
+// qué grupo se eligió para el bit más bajo y qué solución de `dp[remaining]`
+// se usó para el resto — así, combinando esas listas en cada máscara mayor,
+// no se pierde ninguna combinación que podría acabar siendo la 2ª mejor
+// global aunque en un subproblema parcial no fuera la mejor de ese trozo.
+function packArticlesTopK(prepared, truck, maxGroup, k) {
   const n = prepared.length;
   const fullMask = (1 << n) - 1;
   const groupCache = new Map();
@@ -302,9 +305,9 @@ function packArticlesExact(prepared, truck, maxGroup) {
     return result;
   }
 
-  const dp = new Array(1 << n).fill(Infinity);
-  const choice = new Array(1 << n).fill(null); // { indices, result }
-  dp[0] = 0;
+  // dp[mask] = [{ total, indices, result, remaining, subIndex }, ...] (hasta k, ascendente)
+  const dp = new Array(1 << n);
+  dp[0] = [{ total: 0, indices: null, result: null, remaining: null, subIndex: null }];
 
   for (let mask = 1; mask <= fullMask; mask++) {
     const lowIndex = Math.log2(mask & -mask) | 0;
@@ -325,31 +328,58 @@ function packArticlesExact(prepared, truck, maxGroup) {
       }
     }
 
+    const candidates = [];
     for (const indices of candidateGroups) {
       const result = getGroupResult(indices);
       if (!result) continue;
       let groupMask = 0;
       for (const idx of indices) groupMask |= 1 << idx;
       const remaining = mask ^ groupMask;
-      const total = result.length + dp[remaining];
-      if (total < dp[mask] - EPS) {
-        dp[mask] = total;
-        choice[mask] = { indices, result };
-      }
+      dp[remaining].forEach((sub, subIndex) => {
+        candidates.push({ total: result.length + sub.total, indices, result, remaining, subIndex });
+      });
     }
+
+    candidates.sort((a, b) => a.total - b.total);
+
+    // Cada (grupo elegido, sub-solución usada) es una combinación distinta,
+    // aunque el total mida lo mismo que otra — nos quedamos con hasta k.
+    const seen = new Set();
+    const top = [];
+    for (const c of candidates) {
+      const key = `${c.indices.slice().sort((x, y) => x - y).join(',')}#${c.subIndex}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      top.push(c);
+      if (top.length >= k) break;
+    }
+    dp[mask] = top;
   }
 
-  const groups = [];
-  let mask = fullMask;
-  while (mask !== 0) {
-    const { indices, result } = choice[mask];
-    groups.push({ indices, result });
-    let groupMask = 0;
-    for (const idx of indices) groupMask |= 1 << idx;
-    mask ^= groupMask;
+  function reconstruct(mask, subIndex) {
+    const entry = dp[mask][subIndex];
+    if (entry.indices === null) return [];
+    return [{ indices: entry.indices, result: entry.result }, ...reconstruct(entry.remaining, entry.subIndex)];
   }
 
-  return buildBinsFromGroups(groups, prepared);
+  return dp[fullMask].map((_, idx) => buildBinsFromGroups(reconstruct(fullMask, idx), prepared));
+}
+
+// Firma canónica de una solución (qué ids comparten cada tramo y cuánto mide
+// cada uno), para poder distinguir "de verdad son dos disposiciones
+// distintas" de "es la misma solución que ya vimos".
+function solutionSignature(sol) {
+  return sol.bins
+    .map((bin) => {
+      const ids = [];
+      for (const item of bin.items) {
+        if (item.isFamily) ids.push(...item.members.map((m) => m.id));
+        else ids.push(item.id);
+      }
+      return `${ids.slice().sort((a, b) => a - b).join(',')}@${bin.length.toFixed(6)}`;
+    })
+    .sort()
+    .join('|');
 }
 
 // Heurística voraz (rápida, aproximada) usada solo cuando hay demasiados
@@ -465,14 +495,20 @@ function packArticles(items, truck) {
     }
   }
 
-  if (prepared.length === 0) return { bins: [], placements: [], totalLength: 0 };
+  if (prepared.length === 0) return { bins: [], placements: [], totalLength: 0, alternative: null };
 
   if (prepared.length > MAX_EXACT_ARTICLES) {
-    return packArticlesGreedy(prepared, truck);
+    return { ...packArticlesGreedy(prepared, truck), alternative: null };
   }
 
   const maxGroup = Math.min(3, prepared.length);
-  return packArticlesExact(prepared, truck, maxGroup);
+  const solutions = packArticlesTopK(prepared, truck, maxGroup, 2);
+  const primary = solutions[0];
+  const alternative = solutions[1] && solutionSignature(solutions[1]) !== solutionSignature(primary)
+    ? solutions[1]
+    : null;
+
+  return { ...primary, alternative };
 }
 
 // pedido = [{ code, quantity }, ...]

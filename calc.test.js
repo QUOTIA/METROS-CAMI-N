@@ -194,6 +194,37 @@ function approx(a, b, msg) {
   assert.strictEqual(uColumnCount, 9, 'los 9 pallets U (3+4+2) van cada uno solo en su columna');
 }
 
+// --- packArticles: además de la mejor partición, debe devolver la segunda
+// mejor partición DISTINTA (más metros o, si hay empate, los mismos) ---
+{
+  const items = [
+    { id: 1, name: 'A', code: '100x100x050xU', quantity: 3 },
+    { id: 2, name: 'B', code: '100x150x050xU', quantity: 2 },
+    { id: 3, name: 'C', code: '145x100x050xU', quantity: 2 },
+  ];
+  const result = packArticles(items, truck);
+  approx(result.totalLength, 4.45, 'mejor combinación: A+B juntos, C solo');
+  assert.ok(result.alternative, 'debe existir una segunda opción de colocación');
+  approx(result.alternative.totalLength, 4.50, 'segunda mejor combinación (más metros)');
+  assert.ok(
+    result.alternative.totalLength >= result.totalLength - 1e-6,
+    'la alternativa nunca debe medir menos que la mejor opción'
+  );
+  // Han de ser particiones realmente distintas, no la misma repetida.
+  assert.notStrictEqual(
+    JSON.stringify(result.bins.map((b) => b.items.map((i) => i.id).sort())),
+    JSON.stringify(result.alternative.bins.map((b) => b.items.map((i) => i.id).sort())),
+    'la alternativa debe ser una agrupación distinta a la principal'
+  );
+}
+
+// --- packArticles: un solo artículo no tiene alternativa que ofrecer ---
+{
+  const items = [{ id: 1, name: 'Solo', code: '090x120x100xD', quantity: 5 }];
+  const result = packArticles(items, truck);
+  assert.strictEqual(result.alternative, null, 'con un único artículo no hay segunda opción distinta');
+}
+
 // --- packFootprintFamily: artículos con distinta base NO deben agruparse ---
 {
   const { footprintKey, parsePalletCode } = require('./calc.js');
