@@ -163,25 +163,32 @@ function packHeightsFFD(pool, truckHeight) {
 }
 
 // Combina varios artículos que comparten EXACTAMENTE la misma base (ancho x
-// largo) en un único bloque. Los pallets de tipo P forman primero tantas
-// pirámides completas (N en la base + (N-1) encima) como se pueda con la
-// cantidad disponible — esa es su disposición natural, no una pila directa.
-// El resto (pallets D, y los P sueltos que no llegan a completar una
-// pirámide) se reparten libremente entre las N columnas a lo ancho,
-// mezclando referencias distintas en la misma columna una encima de otra
-// mientras quepan en altura, y usando los N-1 huecos "nesteados" que
-// sobren entre columnas para algún pallet suelto adicional. Se calcula el
-// menor número de filas necesario para colocar todos los pallets del grupo.
+// largo) en un único bloque, respetando el tipo de apilado de cada uno:
 //
-// articles = [{ id, name, code, quantity, pallet }] (misma huella entre sí)
+// - Los pallets P forman primero tantas pirámides completas (N en la base +
+//   (N-1) encima) como se pueda con la cantidad disponible — su disposición
+//   natural, no una pila directa.
+// - Los P sueltos que no llegan a completar una pirámide se apilan como si
+//   fueran D (pueden combinarse con D en la misma columna).
+// - Los pallets D (y los P sueltos) se reparten libremente en columnas,
+//   mezclando referencias distintas apiladas una encima de otra mientras la
+//   suma de sus alturas quepa en el camión.
+// - Los pallets U (único) NUNCA se combinan con nada, ni encima ni debajo,
+//   aunque la altura sobrante lo permitiría: cada uno ocupa su propia
+//   columna en solitario.
+//
+// Se calcula el menor número de filas necesario para colocar todos los
+// pallets del grupo. articles = [{ id, name, code, quantity, pallet }]
+// (misma huella entre sí).
 function packFootprintFamily(articles, truck) {
   const { dimA, dimB } = articles[0].pallet;
   const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
 
   const pPool = [];
-  const otherPool = [];
+  const stackablePool = []; // D
+  const soloPool = []; // U: nunca se combina con nada
   for (const art of articles) {
-    const bucket = art.pallet.type === 'P' ? pPool : otherPool;
+    const bucket = art.pallet.type === 'P' ? pPool : art.pallet.type === 'U' ? soloPool : stackablePool;
     for (let i = 0; i < art.quantity; i++) {
       bucket.push({ id: art.id, name: art.name, code: art.code, height: art.pallet.height });
     }
@@ -202,35 +209,19 @@ function packFootprintFamily(articles, truck) {
       pyramidGroups.push({ base: groupItems.slice(0, N), top: groupItems.slice(N) });
     }
 
-    // Los P que no llegan a completar una pirámide se apilan como si fueran D.
-    const leftoverPool = [...otherPool, ...remainingP];
+    // Los P que no completan pirámide se apilan como si fueran D; los U
+    // siguen sin poder combinarse con nada, cada uno en su propia columna.
+    const stackBins = packHeightsFFD([...stackablePool, ...remainingP], truck.height);
+    const soloBins = soloPool.map((item) => ({ items: [item] }));
+    const columnBins = [...stackBins, ...soloBins].map((b) => b.items);
 
-    const bins = packHeightsFFD(leftoverPool, truck.height);
-    const singles = bins.filter((b) => b.items.length === 1);
-    const nonSingles = bins.filter((b) => b.items.length > 1);
-
-    let plainRows = leftoverPool.length === 0 ? 0 : bins.length; // cota superior segura
-    for (let r = 1; r <= bins.length; r++) {
-      const nestedCapacity = r * Math.max(0, N - 1);
-      const leftoverSingles = Math.max(0, singles.length - nestedCapacity);
-      const columnBinsNeeded = nonSingles.length + leftoverSingles;
-      if (columnBinsNeeded <= r * N) {
-        plainRows = r;
-        break;
-      }
-    }
-
-    const nestedCapacity = plainRows * Math.max(0, N - 1);
-    const offloadCount = Math.min(singles.length, nestedCapacity);
-    const nestedItems = singles.slice(0, offloadCount).map((b) => b.items[0]);
-    const columnBins = [...nonSingles, ...singles.slice(offloadCount)].map((b) => b.items);
-
+    const plainRows = columnBins.length === 0 ? 0 : Math.ceil(columnBins.length / N);
     const rows = numPyramidRows + plainRows;
     const length = rows * lengthDim;
     const usedWidth = N * width;
 
     if (!best || length < best.length - EPS) {
-      best = { width, lengthDim, N, rows, length, usedWidth, pyramidGroups, columnBins, nestedItems, isFamily: true };
+      best = { width, lengthDim, N, rows, length, usedWidth, pyramidGroups, columnBins, isFamily: true };
     }
   }
 

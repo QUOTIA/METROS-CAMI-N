@@ -153,13 +153,45 @@ function approx(a, b, msg) {
 
   const totalPalletsPlaced =
     pyramid.base.length + pyramid.top.length +
-    opt.columnBins.reduce((sum, col) => sum + col.length, 0) + opt.nestedItems.length;
+    opt.columnBins.reduce((sum, col) => sum + col.length, 0);
   assert.strictEqual(totalPalletsPlaced, 11, 'los 11 pallets (6+3+2) deben quedar todos colocados');
 
   // El pallet suelto de ref1 (el 6º, que no entra en la pirámide) debe
   // aparecer apilado en una de las columnas de la fila normal.
   const leftoverInPlainRow = opt.columnBins.some((col) => col.some((p) => p.id === 1));
   assert.ok(leftoverInPlainRow, 'el pallet sobrante de ref1 se apila en la fila normal, no se pierde');
+}
+
+// --- packFootprintFamily: los pallets U (único) NUNCA se combinan con nada,
+// ni entre sí ni con otras referencias, aunque compartan base y la altura
+// sobrante lo permitiría. Caso reportado: 4 referencias de base 080x120,
+// una D y tres U ---
+{
+  const items = [
+    { id: 1, name: 'ref1', code: '080x120x116xD', quantity: 6 },
+    { id: 2, name: 'ref2', code: '080x120x159xU', quantity: 3 },
+    { id: 3, name: 'ref3', code: '080x120x143xU', quantity: 4 },
+    { id: 4, name: 'ref4', code: '080x120x155xU', quantity: 2 },
+  ];
+  const result = packArticles(items, truck);
+  const opt = result.bins[0].items[0].option;
+
+  // Solo la D (6 uds, altura 1.16) puede apilarse consigo misma: 2 por
+  // columna (2×1.16=2.32<=2.70) -> 3 columnas. Los 9 U (3+4+2) van cada uno
+  // en su propia columna: 3+9=12 columnas -> ceil(12/3)=4 filas de 1.20m.
+  approx(opt.rows * opt.lengthDim, 4.80, 'los U nunca se combinan: 4 filas, no 2');
+  assert.strictEqual(opt.pyramidGroups.length, 0, 'no hay pallets P en este pedido');
+
+  for (const col of opt.columnBins) {
+    if (col.length > 1) {
+      assert.ok(
+        col.every((p) => p.id === 1),
+        'una columna con más de un pallet solo puede ser la referencia D (nunca un U combinado)'
+      );
+    }
+  }
+  const uColumnCount = opt.columnBins.filter((col) => col.length === 1 && col[0].id !== 1).length;
+  assert.strictEqual(uColumnCount, 9, 'los 9 pallets U (3+4+2) van cada uno solo en su columna');
 }
 
 // --- packFootprintFamily: artículos con distinta base NO deben agruparse ---

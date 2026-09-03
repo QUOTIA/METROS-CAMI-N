@@ -120,25 +120,24 @@ trata como un único bloque en dos etapas:
    encima) como se pueda — esa es su disposición natural, no una pila
    directa. Por ejemplo, con 6 pallets P y N=3, se forma 1 pirámide completa
    (3+2=5) y queda 1 P suelto.
-2. **El resto, apilado por altura.** Los pallets D, más los P sueltos que no
-   llegan a completar una pirámide (se apilan entonces como si fueran D),
-   se reparten libremente en filas normales entre:
-   - Las columnas a lo ancho (hasta N) — cada columna puede llevar pallets
-     de referencias distintas apiladas una encima de otra, mientras la suma
-     de sus alturas quepa en el camión.
-   - Los huecos "nesteados" de tipo pirámide entre columnas (N-1 por fila),
-     para algún pallet suelto adicional que no complete pareja en ninguna
-     columna.
-
-   El reparto de esta segunda etapa usa un algoritmo de empaquetado por
-   alturas (First-Fit-Decreasing): ordena los pallets de mayor a menor altura
-   y va llenando columnas; los que quedan sueltos se mandan a los huecos de
-   pirámide si hay sitio.
+2. **El resto, apilado por altura — pero solo entre D.** Los pallets D, más
+   los P sueltos que no llegan a completar una pirámide (se apilan entonces
+   como si fueran D), se reparten libremente en columnas: cada columna puede
+   llevar pallets de referencias distintas apiladas una encima de otra,
+   mientras la suma de sus alturas quepa en el camión. El reparto usa un
+   algoritmo de empaquetado por alturas (First-Fit-Decreasing): ordena los
+   pallets de mayor a menor altura y va llenando columnas.
+3. **Los pallets U nunca se combinan con nada.** Un pallet de tipo único (U)
+   no se apila ni debajo ni encima de ningún otro, aunque la altura sobrante
+   lo permitiría — cada uno ocupa su propia columna en solitario, igual que
+   si fuera el único artículo de esa base.
 
 Se calcula así el menor número de filas posible para colocar todos los
-pallets de las referencias combinadas. En el diagrama, una misma casilla
-puede mostrar dos colores (dos referencias) apiladas — es intencional:
-significa que ahí caben pallets de ambas.
+pallets de las referencias combinadas, respetando esa regla. En el diagrama,
+una misma casilla puede mostrar dos colores (dos referencias D, o una D y un
+P suelto) apiladas — es intencional: significa que ahí caben pallets de
+ambas. Una casilla de un pallet U, en cambio, nunca aparece mezclada con
+otro color.
 
 Esto no es una búsqueda exhaustiva de todas las formas de repartir alturas
 (sería un problema de empaquetado en contenedores, NP-difícil en general),

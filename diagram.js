@@ -170,7 +170,7 @@ function drawNestedRow(group, slotY, N, width, lengthDim, xOffset, items, colorB
 // cuando hace falta.
 function drawFamilyPlacement(svg, placement, yStart, binLength, xOffset, colorById) {
   const group = el('g', {});
-  const { N, width, lengthDim, rows, pyramidGroups, columnBins, nestedItems } = placement.option;
+  const { N, width, lengthDim, rows, pyramidGroups, columnBins } = placement.option;
 
   for (let r = 0; r < rows; r++) {
     const slotY = yStart + r * lengthDim;
@@ -206,10 +206,6 @@ function drawFamilyPlacement(svg, placement, yStart, binLength, xOffset, colorBy
             x, y: slotY, width, height: lengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
           }));
         }
-      }
-      if (N >= 2) {
-        const rowNested = nestedItems.slice(plainRow * (N - 1), (plainRow + 1) * (N - 1));
-        drawNestedRow(group, slotY, N, width, lengthDim, xOffset, rowNested, colorById);
       }
     }
 
