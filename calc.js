@@ -111,11 +111,23 @@ function enumerateOptions(pallet, quantity, truck) {
   return options;
 }
 
+// Un pallet más alto que el alto útil del camión no cabe de ninguna forma,
+// sea cual sea su tipo de apilado (ni siquiera en un único nivel).
+function assertHeightFits(code, pallet, truck) {
+  if (pallet.height > truck.height + EPS) {
+    throw new Error(
+      `El pallet "${code}" mide ${pallet.height.toFixed(2)} m de alto, más que el alto útil del camión ` +
+        `(${truck.height.toFixed(2)} m): no cabe de ninguna forma.`
+    );
+  }
+}
+
 // Calcula, para una línea de pedido (medida + cantidad), la mejor orientación
 // para minimizar los metros de largo de camión ocupados, sin compartir ancho
 // con ningún otro artículo (ver `packArticles` para la versión combinada).
 function computeLineResult(code, quantity, truck) {
   const pallet = parsePalletCode(code);
+  assertHeightFits(code, pallet, truck);
   const candidates = enumerateOptions(pallet, quantity, truck);
 
   if (candidates.length === 0) {
@@ -503,6 +515,7 @@ function packArticles(items, truck) {
   // Validar cada artículo por separado (mensaje de error específico) antes
   // de agrupar por huella.
   parsedItems.forEach((item) => {
+    assertHeightFits(item.code, item.pallet, truck);
     const options = enumerateOptions(item.pallet, item.quantity, truck);
     if (options.length === 0) {
       throw new Error(

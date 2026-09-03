@@ -33,6 +33,21 @@ function approx(a, b, msg) {
   assert.strictEqual(r.best.levels, 1);
 }
 
+// --- Un pallet más alto que el camión no cabe de ninguna forma, sea cual
+// sea su tipo de apilado (ni un único nivel de U, D o P) ---
+{
+  assert.throws(
+    () => computeLineResult('090x120x300xU', 1, truck),
+    /más que el alto útil del camión/,
+    'un pallet U de 3,00 m con camión de 2,70 m de alto debe rechazarse'
+  );
+  assert.throws(
+    () => packArticles([{ id: 1, name: 'Alto', code: '090x120x300xD', quantity: 2 }], truck),
+    /más que el alto útil del camión/,
+    'packArticles también debe rechazar un pallet más alto que el camión'
+  );
+}
+
 // --- P: 0.80x1.20x1.00xP -> 0.80 a lo ancho, 3 a lo ancho (2.4m), piramide 3+2=5 ---
 {
   const r = computeLineResult('0,80x1,20x1,00xP', 5, truck);

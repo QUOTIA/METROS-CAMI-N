@@ -102,7 +102,8 @@
   .detail-toggle:hover { color: var(--accent); }
   .shared-hint { font-size: 0.75rem; color: var(--accent); margin-top: 2px; }
 
-  .diagram-panel { margin-top: 16px; }
+  .diagrams-row { display: flex; gap: 16px; align-items: flex-start; }
+  .diagram-panel { margin-top: 16px; flex: 1 1 0; min-width: 0; }
   .diagram-panel h2 { font-size: 1rem; margin: 0 0 4px; }
   .diagram-panel .diagram-hint { color: var(--muted); font-size: 0.78rem; margin: 0 0 12px; }
   .alt-panel { border-style: dashed; }
@@ -189,20 +190,22 @@
   <span class="value" id="grandTotalValue">0,00 m</span>
 </div>
 
-<div class="panel diagram-panel">
-  <h2>Disposición en el camión</h2>
-  <p class="diagram-hint">Vista en planta, camión de arriba (cabecera) a abajo (puertas). Cada color es un artículo/referencia; cada pallet lleva su ancho (borde superior) y su largo (borde lateral) en metros; los recuadros discontinuos son hueco sin usar.</p>
-  <div class="diagram-scroll" id="diagramHost"></div>
-</div>
-
-<div class="panel diagram-panel alt-panel" id="altPanel" hidden>
-  <h2 id="altTitle">Segunda opción de colocación</h2>
-  <p class="diagram-hint">Otra forma de combinar los mismos artículos, distinta a la de arriba.</p>
-  <div class="grand-total alt-total">
-    <span>Total metros de largo (opción 2)</span>
-    <span class="value" id="altTotalValue">0,00 m</span>
+<div class="diagrams-row">
+  <div class="panel diagram-panel">
+    <h2>Disposición en el camión</h2>
+    <p class="diagram-hint">Vista en planta, camión de arriba (cabecera) a abajo (puertas). Cada color es un artículo/referencia; cada pallet lleva su ancho (borde superior) y su largo (borde lateral) en metros; los recuadros discontinuos son hueco sin usar.</p>
+    <div class="diagram-scroll" id="diagramHost"></div>
   </div>
-  <div class="diagram-scroll" id="diagramHostAlt"></div>
+
+  <div class="panel diagram-panel alt-panel" id="altPanel" hidden>
+    <h2 id="altTitle">Segunda opción de colocación</h2>
+    <p class="diagram-hint">Otra forma de combinar los mismos artículos, distinta a la de la izquierda.</p>
+    <div class="grand-total alt-total">
+      <span>Total metros de largo (opción 2)</span>
+      <span class="value" id="altTotalValue">0,00 m</span>
+    </div>
+    <div class="diagram-scroll" id="diagramHostAlt"></div>
+  </div>
 </div>
 
 <script src="calc.js"></script>

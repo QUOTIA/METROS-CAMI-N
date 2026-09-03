@@ -39,12 +39,13 @@ El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
 de la izquierda por si se usa con otro tipo de camión.
 
 Cuando existe una segunda disposición distinta de la mejor —igual o más
-metros que la mejor opción—, se muestra debajo con su propio total y su
-propio diagrama, bajo el título "Segunda opción de colocación" (indica si
-mide lo mismo o más que la primera). Esto no requiere varios artículos: un
-único artículo también puede tener dos disposiciones físicas distintas que
-midan exactamente lo mismo (p. ej. 3 pallets a lo ancho x 4 filas frente a 2
-a lo ancho x 6 filas) y ambas se muestran. Si solo hay una forma razonable de
+metros que la mejor opción—, se muestra al lado (a la derecha, a la misma
+altura, sin necesidad de bajar en la página) con su propio total y su propio
+diagrama, bajo el título "Segunda opción de colocación" (indica si mide lo
+mismo o más que la primera). Esto no requiere varios artículos: un único
+artículo también puede tener dos disposiciones físicas distintas que midan
+exactamente lo mismo (p. ej. 3 pallets a lo ancho x 4 filas frente a 2 a lo
+ancho x 6 filas) y ambas se muestran. Si solo hay una forma razonable de
 colocarlos, esta sección no aparece.
 
 ## Formato de medida
@@ -56,7 +57,10 @@ selector de tipo (D/P/U):
   pallet. La app prueba las dos orientaciones posibles (cuál va a lo ancho
   del camión y cuál a lo largo) y usa la que menos metros de largo ocupa —
   no importa en qué casilla pongas cuál, el resultado es el mismo.
-- El tercer valor es la altura del pallet.
+- El tercer valor es la altura del pallet. Si supera la altura útil del
+  camión, la fila muestra un aviso ("no cabe de ninguna forma") en vez de
+  un resultado — un pallet así no cabe ni siquiera en un único nivel, sea
+  cual sea su tipo de apilado.
 - El botón de tipo indica cómo se puede apilar:
   - **U — único**: no se puede poner un pallet encima de otro. Siempre 1 nivel.
   - **D — remontable**: se pueden apilar pallets uno encima de otro hasta donde
