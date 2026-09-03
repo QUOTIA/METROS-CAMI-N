@@ -36,7 +36,13 @@ diagrama veas dos colores distintos, uno encima de otro, porque ahí caben
 pallets de dos referencias distintas.
 
 El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
-de la izquierda por si se usa con otro tipo de camión.
+de la izquierda por si se usa con otro tipo de camión. Los botones **Estándar**
+/ **Furgo (Iulian)** rellenan esas dos casillas de golpe con las medidas de
+cada camión (el furgo es más pequeño: 2,10 x 2,00 m) — se resalta el que
+coincida con lo que haya en las casillas en cada momento. Con el furgo
+seleccionado, si el pedido no cabe en su largo máximo (4,20 m) aparece un
+aviso en rojo con cuántos metros sobran; si cabe, indica cuántos quedan
+libres.
 
 Cuando existe una segunda disposición distinta de la mejor —igual o más
 metros que la mejor opción—, se muestra al lado (a la derecha, a la misma
@@ -173,10 +179,11 @@ normal, con la lista de transportistas: nombre, largo máximo de su camión y,
 si su camión tiene otro ancho o alto útil distinto del estándar (2,45 x 2,70
 m), esos valores también. Ancho/alto en blanco significan "camión estándar".
 Se guarda en el navegador (`localStorage`), no en el pedido. Incluye de
-partida a los 8 transportistas ya dados de alta y un camión aparte de
-medidas distintas (4,20 x 2,10 x 2,00 m) para cuando haga falta. De momento
-solo sirve para mantener esos datos; todavía no se usa para nada en el
-cálculo — la idea es, más adelante, comparar el total de metros del pedido
+partida a los 8 transportistas ya dados de alta; Iulian tiene un camión más
+pequeño (el "furgo": 4,20 x 2,10 x 2,00 m), también seleccionable como botón
+rápido en el panel "Camión" (ver más arriba). De momento este panel solo
+sirve para mantener esos datos; todavía no se usa para nada en el cálculo —
+la idea es, más adelante, comparar el total de metros del pedido
 (recalculado con el ancho/alto de cada camión) contra su largo máximo para
 sugerir cuál transportista aprovecha mejor el camión.
 

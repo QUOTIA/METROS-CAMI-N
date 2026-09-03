@@ -91,6 +91,8 @@
   }
   .field { margin-bottom: 12px; }
   .hint { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+  .hint.warning { color: var(--danger); }
+  .truck-preset-toggle { flex-wrap: wrap; }
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 500; font-size: 0.78rem; }
@@ -216,6 +218,13 @@
   <div class="panel truck-panel">
     <h2>Camión</h2>
     <div class="field">
+      <label>Tipo de camión</label>
+      <div class="type-toggle truck-preset-toggle">
+        <button type="button" class="type-btn truck-preset-btn" data-preset="standard">Estándar</button>
+        <button type="button" class="type-btn truck-preset-btn" data-preset="furgo">Furgo (Iulian)</button>
+      </div>
+    </div>
+    <div class="field">
       <label for="truckWidth">Ancho útil (m)</label>
       <input type="number" id="truckWidth" step="0.01" value="2.45" />
     </div>
@@ -223,6 +232,7 @@
       <label for="truckHeight">Alto útil (m)</label>
       <input type="number" id="truckHeight" step="0.01" value="2.70" />
     </div>
+    <p class="hint" id="furgoLengthHint" hidden></p>
     <p class="hint">Tipos de apilado:<br>
       <b>U</b> único, no se apila.<br>
       <b>D</b> remontable, se apila hasta donde llegue la altura.<br>
@@ -286,24 +296,22 @@ const PALLET_TYPES = ['D', 'P', 'U'];
 // cálculo, solo guarda los datos (en este navegador) hasta que se decida
 // cómo asignar cada pedido a un transportista según los metros que ocupe.
 const CARRIERS_STORAGE_KEY = 'metrosCamion.carriers';
-const SPECIAL_TRUCK_SEEDED_KEY = 'metrosCamion.specialTruckSeeded';
+const IULIAN_FURGO_MIGRATED_KEY = 'metrosCamion.iulianFurgoMigrated';
 let carrierIdCounter = 0;
 
-// Camión distinto del estándar (más corto y estrecho): 4,20 m de largo,
-// 2,10 m de ancho útil, 2,00 m de alto útil.
-function makeSpecialTruck() {
-  return { id: ++carrierIdCounter, name: '', maxMeters: '4.2', width: '2.1', height: '2' };
-}
-
+// El furgo (4,20 m de largo, 2,10 m de ancho útil, 2,00 m de alto útil) es
+// el camión de Iulian — más pequeño que el estándar del resto.
 function defaultCarriers() {
-  const named = ['Iulian', 'Paco', 'Jorge', 'Marc', 'Roberto', 'Juanjo', 'Luis', 'Toni'].map((name) => ({
-    id: ++carrierIdCounter,
-    name,
-    maxMeters: '',
-    width: '',
-    height: '',
-  }));
-  return [...named, makeSpecialTruck()];
+  return ['Iulian', 'Paco', 'Jorge', 'Marc', 'Roberto', 'Juanjo', 'Luis', 'Toni'].map((name) => {
+    const isFurgo = name === 'Iulian';
+    return {
+      id: ++carrierIdCounter,
+      name,
+      maxMeters: isFurgo ? '4.2' : '',
+      width: isFurgo ? '2.1' : '',
+      height: isFurgo ? '2' : '',
+    };
+  });
 }
 
 function loadCarriers() {
@@ -321,27 +329,31 @@ function loadCarriers() {
     // localStorage no disponible o datos corruptos: seguimos con los valores por defecto.
   }
 
-  let seeded = false;
-  try {
-    seeded = !!localStorage.getItem(SPECIAL_TRUCK_SEEDED_KEY);
-  } catch (err) {
-    // Sin acceso a localStorage: no hay nada que migrar de una carga anterior.
-  }
-  if (seeded) return list || defaultCarriers();
+  if (!list) return defaultCarriers();
 
-  // Primera carga con esta versión: si ya había transportistas guardados de
-  // antes de que existiera el camión especial, se añade una única vez — no
-  // reaparece en cargas futuras aunque el usuario lo borre después.
-  if (!list) {
-    list = defaultCarriers();
-  } else {
-    list.push(makeSpecialTruck());
-  }
+  // Migración única: versiones anteriores guardaban el furgo como un
+  // transportista aparte sin nombre, o dejaban a Iulian con el camión
+  // estándar en blanco. Si detectamos cualquiera de los dos casos, los
+  // arreglamos aquí — no vuelve a ejecutarse en cargas futuras.
   try {
-    localStorage.setItem(CARRIERS_STORAGE_KEY, JSON.stringify(list));
-    localStorage.setItem(SPECIAL_TRUCK_SEEDED_KEY, '1');
+    if (!localStorage.getItem(IULIAN_FURGO_MIGRATED_KEY)) {
+      const furgoIdx = list.findIndex((c) => c.maxMeters === '4.2' && c.width === '2.1' && c.height === '2');
+      if (furgoIdx >= 0) {
+        list[furgoIdx].name = 'Iulian';
+        list = list.filter((c, i) => i === furgoIdx || c.name !== 'Iulian');
+      } else {
+        const iulian = list.find((c) => c.name === 'Iulian');
+        if (iulian && !iulian.maxMeters && !iulian.width && !iulian.height) {
+          iulian.maxMeters = '4.2';
+          iulian.width = '2.1';
+          iulian.height = '2';
+        }
+      }
+      localStorage.setItem(CARRIERS_STORAGE_KEY, JSON.stringify(list));
+      localStorage.setItem(IULIAN_FURGO_MIGRATED_KEY, '1');
+    }
   } catch (err) {
-    // Si no se puede persistir, se reintentará en la próxima carga.
+    // Sin acceso a localStorage: se reintentará en la próxima carga.
   }
   return list;
 }
@@ -440,6 +452,55 @@ function getTruck() {
     width: parseFloat(document.getElementById('truckWidth').value) || 2.45,
     height: parseFloat(document.getElementById('truckHeight').value) || 2.70,
   };
+}
+
+// El estándar es el camión que más se usa; el furgo es el camión pequeño de
+// Iulian, con un largo máximo real (los demás no tienen límite en esta app).
+const TRUCK_PRESETS = [
+  { id: 'standard', label: 'Estándar', width: 2.45, height: 2.70 },
+  { id: 'furgo', label: 'Furgo (Iulian)', width: 2.1, height: 2.0, maxLength: 4.2 },
+];
+
+function activeTruckPreset(truck) {
+  return (
+    TRUCK_PRESETS.find(
+      (p) => Math.abs(p.width - truck.width) < 0.005 && Math.abs(p.height - truck.height) < 0.005
+    ) || null
+  );
+}
+
+function applyTruckPreset(id) {
+  const preset = TRUCK_PRESETS.find((p) => p.id === id);
+  if (!preset) return;
+  document.getElementById('truckWidth').value = preset.width;
+  document.getElementById('truckHeight').value = preset.height;
+  renderResults();
+}
+
+function syncTruckPresetButtons(truck) {
+  const active = activeTruckPreset(truck);
+  document.querySelectorAll('.truck-preset-btn').forEach((btn) => {
+    btn.classList.toggle('active', !!active && btn.dataset.preset === active.id);
+  });
+}
+
+function updateFurgoHint(truck, totalLength) {
+  const hint = document.getElementById('furgoLengthHint');
+  const preset = activeTruckPreset(truck);
+  if (!preset || !preset.maxLength || totalLength <= 0) {
+    hint.hidden = true;
+    hint.textContent = '';
+    hint.classList.remove('warning');
+    return;
+  }
+  hint.hidden = false;
+  if (totalLength > preset.maxLength + 0.005) {
+    hint.classList.add('warning');
+    hint.textContent = `No cabe en el furgo (máx. ${fmt(preset.maxLength)} m): sobran ${fmt(totalLength - preset.maxLength)} m.`;
+  } else {
+    hint.classList.remove('warning');
+    hint.textContent = `Cabe en el furgo (máx. ${fmt(preset.maxLength)} m): quedan ${fmt(preset.maxLength - totalLength)} m libres.`;
+  }
 }
 
 function escapeHtml(str) {
@@ -551,7 +612,10 @@ function renderResults() {
     }
   });
 
-  document.getElementById('grandTotalValue').textContent = `${fmt(packResult ? packResult.totalLength : 0)} m`;
+  const totalLength = packResult ? packResult.totalLength : 0;
+  document.getElementById('grandTotalValue').textContent = `${fmt(totalLength)} m`;
+  syncTruckPresetButtons(truck);
+  updateFurgoHint(truck, totalLength);
 
   const orderedIds = validItems.map((item) => item.id);
   window.renderTruckDiagram(document.getElementById('diagramHost'), packResult, truck, orderedIds);
@@ -574,6 +638,9 @@ function renderResults() {
 document.getElementById('addRowBtn').addEventListener('click', addRow);
 document.getElementById('truckWidth').addEventListener('input', renderResults);
 document.getElementById('truckHeight').addEventListener('input', renderResults);
+document.querySelectorAll('.truck-preset-btn').forEach((btn) => {
+  btn.addEventListener('click', () => applyTruckPreset(btn.dataset.preset));
+});
 
 articles.push(makeRow(), makeRow(), makeRow());
 render();
