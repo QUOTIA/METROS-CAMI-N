@@ -9,10 +9,11 @@ Abre `index.html` en el navegador (doble clic, o `python3 -m http.server` y entr
 a `http://localhost:8000`). Por cada artículo del pedido:
 
 1. (Opcional) ponle una referencia o nombre.
-2. Introduce su volumen con el formato `ANCHOxLARGOxALTOxTIPO`,
-   por ejemplo `090X172X141XU` (medidas en cm) o `0,80x1,20x1,00xP` (medidas en m).
-3. Introduce la cantidad de pallets de ese artículo.
-4. Añade tantos artículos como tenga el pedido con "+ Añadir artículo".
+2. Introduce el ancho, el largo y el alto del pallet, cada uno en su propia
+   casilla (en cm, p. ej. `90`, o en metros, p. ej. `0,90`).
+3. Marca su tipo de apilado con los botones **D** / **P** / **U**.
+4. Introduce la cantidad de pallets de ese artículo.
+5. Añade tantos artículos como tenga el pedido con "+ Añadir artículo".
 
 El total de metros de largo se muestra abajo y se actualiza automáticamente al
 escribir. Cuando dos (o más) artículos caben juntos a lo ancho del camión, la
@@ -39,14 +40,15 @@ de la izquierda por si se usa con otro tipo de camión.
 
 ## Formato de medida
 
-`ANCHO x LARGO x ALTO x TIPO`
+Cada artículo tiene tres casillas de medida (ancho, largo, alto) y un
+selector de tipo (D/P/U):
 
-- Los dos primeros números son las dos medidas horizontales del pallet. La app
-  prueba las dos orientaciones posibles (cuál va a lo ancho del camión y cuál
-  a lo largo) y usa la que menos metros de largo ocupa — no hace falta indicar
-  cuál es "ancho" y cuál es "largo" al escribir la medida.
-- El tercer número es la altura del pallet.
-- La letra final indica cómo se puede apilar:
+- Los dos primeros valores (ancho y largo) son las medidas horizontales del
+  pallet. La app prueba las dos orientaciones posibles (cuál va a lo ancho
+  del camión y cuál a lo largo) y usa la que menos metros de largo ocupa —
+  no importa en qué casilla pongas cuál, el resultado es el mismo.
+- El tercer valor es la altura del pallet.
+- El botón de tipo indica cómo se puede apilar:
   - **U — único**: no se puede poner un pallet encima de otro. Siempre 1 nivel.
   - **D — remontable**: se pueden apilar pallets uno encima de otro hasta donde
     llegue la altura útil del camión (2,70 m por defecto). Ej.: un pallet de

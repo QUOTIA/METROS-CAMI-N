@@ -51,8 +51,20 @@
   th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 500; font-size: 0.78rem; }
   td.name-cell input { width: 100%; min-width: 100px; }
-  td.code-cell input { width: 100%; min-width: 150px; }
+  td.dim-cell input { width: 62px; text-align: center; }
   td.qty-cell input { width: 72px; }
+  .type-toggle { display: flex; gap: 4px; }
+  .type-btn {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .type-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .type-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   td.result-cell { font-size: 0.82rem; color: var(--muted); min-width: 220px; }
   td.result-cell.error { color: var(--danger); }
   td.result-cell b { color: var(--text); }
@@ -127,7 +139,7 @@
 <body>
 
 <h1>Calculadora de metros lineales de camión</h1>
-<p class="subtitle">Introduce cada artículo con su volumen en formato <code>ANCHOxLARGOxALTOxTIPO</code> (p. ej. <code>090X172X141XU</code>) y la cantidad de pallets. La app elige la orientación y el apilado que menos largo de camión ocupan, combinando artículos distintos en el mismo tramo de ancho cuando caben juntos, para minimizar el total.</p>
+<p class="subtitle">Introduce el ancho, largo y alto del pallet de cada artículo (en cm o en metros), marca su tipo de apilado (D/P/U) y la cantidad. La app elige la orientación y el apilado que menos largo de camión ocupan, combinando artículos distintos en el mismo tramo de ancho cuando caben juntos, para minimizar el total.</p>
 
 <div class="layout">
   <div class="panel truck-panel">
@@ -151,7 +163,16 @@
     <h2>Artículos</h2>
     <table>
       <thead>
-        <tr><th>Artículo</th><th>Volumen (AxLxAltoxTipo)</th><th>Pallets</th><th>Resultado</th><th></th></tr>
+        <tr>
+          <th>Artículo</th>
+          <th>Ancho</th>
+          <th>Largo</th>
+          <th>Alto</th>
+          <th>Tipo</th>
+          <th>Pallets</th>
+          <th>Resultado</th>
+          <th></th>
+        </tr>
       </thead>
       <tbody id="articlesBody"></tbody>
     </table>
@@ -174,11 +195,19 @@
 <script src="diagram.js"></script>
 <script>
 let rowCounter = 0;
-const articles = []; // { id, name, code, quantity }
+const articles = []; // { id, name, width, length, height, type, quantity }
+const PALLET_TYPES = ['D', 'P', 'U'];
 
 function makeRow() {
   rowCounter += 1;
-  return { id: rowCounter, name: '', code: '', quantity: '' };
+  return { id: rowCounter, name: '', width: '', length: '', height: '', type: '', quantity: '' };
+}
+
+// Construye el código "AxLxAltoxTipo" que espera calc.js a partir de los
+// campos sueltos, o null si a la fila le falta algún dato.
+function buildCode(article) {
+  if (!article.width || !article.length || !article.height || !article.type) return null;
+  return `${article.width}x${article.length}x${article.height}x${article.type}`;
 }
 
 function addRow() {
@@ -218,16 +247,32 @@ function render() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="name-cell"><input type="text" placeholder="Ref./nombre" value="${escapeHtml(article.name)}" /></td>
-      <td class="code-cell"><input type="text" placeholder="090X172X141XU" value="${escapeHtml(article.code)}" /></td>
+      <td class="dim-cell"><input type="text" inputmode="decimal" placeholder="90" value="${escapeHtml(article.width)}" /></td>
+      <td class="dim-cell"><input type="text" inputmode="decimal" placeholder="120" value="${escapeHtml(article.length)}" /></td>
+      <td class="dim-cell"><input type="text" inputmode="decimal" placeholder="100" value="${escapeHtml(article.height)}" /></td>
+      <td class="type-cell">
+        <div class="type-toggle">
+          ${PALLET_TYPES.map((t) => `<button type="button" class="type-btn${article.type === t ? ' active' : ''}" data-type="${t}">${t}</button>`).join('')}
+        </div>
+      </td>
       <td class="qty-cell"><input type="number" min="1" placeholder="0" value="${escapeHtml(String(article.quantity))}" /></td>
       <td class="result-cell" data-result="${article.id}"></td>
       <td class="row-actions"><button title="Eliminar">✕</button></td>
     `;
-    const [nameInput, codeInput, qtyInput] = tr.querySelectorAll('input');
+    const [nameInput, widthInput, lengthInput, heightInput, qtyInput] = tr.querySelectorAll('input');
     nameInput.addEventListener('input', (e) => { article.name = e.target.value; });
-    codeInput.addEventListener('input', (e) => { article.code = e.target.value; renderResults(); });
+    widthInput.addEventListener('input', (e) => { article.width = e.target.value; renderResults(); });
+    lengthInput.addEventListener('input', (e) => { article.length = e.target.value; renderResults(); });
+    heightInput.addEventListener('input', (e) => { article.height = e.target.value; renderResults(); });
     qtyInput.addEventListener('input', (e) => { article.quantity = e.target.value; renderResults(); });
-    tr.querySelector('button').addEventListener('click', () => removeRow(article.id));
+    tr.querySelectorAll('.type-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        article.type = btn.dataset.type;
+        tr.querySelectorAll('.type-btn').forEach((b) => b.classList.toggle('active', b === btn));
+        renderResults();
+      });
+    });
+    tr.querySelector('.row-actions button').addEventListener('click', () => removeRow(article.id));
     tbody.appendChild(tr);
   });
 
@@ -242,7 +287,8 @@ function renderResults() {
     const cell = document.querySelector(`[data-result="${article.id}"]`);
     if (!cell) return;
 
-    if (article.code.trim() === '' || article.quantity === '') {
+    const code = buildCode(article);
+    if (!code || article.quantity === '') {
       cell.textContent = '';
       cell.className = 'result-cell';
       return;
@@ -251,8 +297,8 @@ function renderResults() {
     const qty = parseInt(article.quantity, 10);
     try {
       if (!Number.isFinite(qty) || qty <= 0) throw new Error('Cantidad inválida');
-      window.PalletCalc.computeLineResult(article.code, qty, truck); // valida formato y que quepa
-      validItems.push({ id: article.id, name: article.name, code: article.code, quantity: qty });
+      window.PalletCalc.computeLineResult(code, qty, truck); // valida formato y que quepa
+      validItems.push({ id: article.id, name: article.name, code, quantity: qty });
     } catch (err) {
       cell.className = 'result-cell error';
       cell.textContent = err.message;
