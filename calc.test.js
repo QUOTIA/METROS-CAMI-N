@@ -256,6 +256,14 @@ function approx(a, b, msg) {
   const primaryWidths = result.bins[0].items[0].option.columnWidths.slice().sort();
   const altWidths = result.alternative.bins[0].items[0].option.columnWidths.slice().sort();
   assert.notDeepStrictEqual(primaryWidths, altWidths, 'la alternativa debe usar anchos de columna distintos (mezclados)');
+
+  // Cada columna mezclada debe llevar SU PROPIO largo (el que le corresponde
+  // a su propia orientación), no el largo de la fila entera — una columna
+  // de 1,30 m de ancho mide 0,80 m de largo, no 1,30 (eso sería inventarse
+  // la medida y confundiría el dibujo).
+  const altOpt = result.alternative.bins[0].items[0].option;
+  const pairs = altOpt.columnWidths.map((w, i) => [w, altOpt.columnLengths[i]]).sort((a, b) => a[0] - b[0]);
+  assert.deepStrictEqual(pairs, [[0.8, 1.3], [1.3, 0.8]], 'cada columna mezclada lleva su propio largo, no el de la fila');
 }
 
 // --- packArticles: un solo artículo SÍ puede tener una segunda disposición

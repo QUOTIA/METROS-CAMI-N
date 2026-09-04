@@ -142,6 +142,11 @@ function enumerateRectOptions(pallet, quantity, truck) {
       const length = slots * lengthDim;
       const usedWidth = usedByA + nB * widthB;
       const columnWidths = [...new Array(nA).fill(widthA), ...new Array(nB).fill(widthB)];
+      // El largo de la FILA es el máximo de las dos orientaciones (hace
+      // falta ese hueco para que quepa la más profunda), pero cada columna
+      // por sí sola solo ocupa SU propio largo — el resto de esa columna,
+      // dentro de la fila, queda sin usar y así debe marcarse en el dibujo.
+      const columnLengths = [...new Array(nA).fill(lengthA), ...new Array(nB).fill(lengthB)];
       const description = nB > 0
         ? `${nA}+${nB} pallet(s) combinados (${nA}×${widthA.toFixed(2)} m + ${nB}×${widthB.toFixed(2)} m de ancho) x ${levels} nivel(es) (${stackWord})`
         : type === 'U'
@@ -150,7 +155,7 @@ function enumerateRectOptions(pallet, quantity, truck) {
 
       options.push({
         width: widthA, lengthDim, N, perSlot, levels, description,
-        slots, length, usedWidth, columnWidths,
+        slots, length, usedWidth, columnWidths, columnLengths,
       });
     }
   }

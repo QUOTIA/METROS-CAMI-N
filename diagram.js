@@ -61,17 +61,21 @@ function labelCell(group, x, y, width, lengthDim) {
 // xOffset: posición a lo ancho (horizontal) donde empieza el carril de este artículo.
 function drawGridSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
   const { N, width, lengthDim, levels } = opt;
-  // Cada columna puede tener su propio ancho si el pallet se mezcla en dos
-  // orientaciones distintas en la misma fila (ver `enumerateRectOptions`).
+  // Cada columna puede tener su propio ancho y largo si el pallet se mezcla
+  // en dos orientaciones distintas en la misma fila (ver
+  // `enumerateRectOptions`) — el largo de la fila es el de la columna más
+  // profunda, así que una columna más corta deja un hueco sin usar debajo.
   const columnWidths = opt.columnWidths || new Array(N).fill(width);
+  const columnLengths = opt.columnLengths || new Array(N).fill(lengthDim);
   const cols = distributeColumns(N, levels, itemsInSlot);
 
   let x = xOffset;
   for (let c = 0; c < N; c++) {
     const colWidth = columnWidths[c];
+    const colLength = columnLengths[c];
     const filled = cols[c] > 0;
     const rect = el('rect', {
-      x, y: slotY, width: colWidth, height: lengthDim,
+      x, y: slotY, width: colWidth, height: colLength,
       class: filled ? 'pallet-cell' : 'pallet-cell empty',
       fill: filled ? color : 'none',
       'fill-opacity': filled ? (cols[c] / levels) * 0.55 + 0.35 : 0,
@@ -79,11 +83,11 @@ function drawGridSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
     group.appendChild(rect);
 
     if (filled) {
-      labelCell(group, x, slotY, colWidth, lengthDim);
+      labelCell(group, x, slotY, colWidth, colLength);
       if (levels > 1) {
         const label = el('text', {
           x: x + colWidth / 2,
-          y: slotY + lengthDim / 2,
+          y: slotY + colLength / 2,
           class: 'cell-badge',
           'text-anchor': 'middle',
           'dominant-baseline': 'middle',
@@ -92,6 +96,14 @@ function drawGridSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
         group.appendChild(label);
       }
     }
+
+    if (colLength < lengthDim - DIAG_EPS) {
+      group.appendChild(el('rect', {
+        x, y: slotY + colLength, width: colWidth, height: lengthDim - colLength,
+        class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+      }));
+    }
+
     x += colWidth;
   }
 }
