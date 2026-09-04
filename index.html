@@ -92,7 +92,14 @@
   .field { margin-bottom: 12px; }
   .hint { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
   .hint.warning { color: var(--danger); }
-  .truck-preset-toggle { flex-wrap: wrap; }
+  .truck-decision {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .truck-decision strong { display: block; font-size: 1rem; }
+  .truck-decision-dims { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 500; font-size: 0.78rem; }
@@ -218,21 +225,14 @@
   <div class="panel truck-panel">
     <h2>Camión</h2>
     <div class="field">
-      <label>Tipo de camión</label>
-      <div class="type-toggle truck-preset-toggle">
-        <button type="button" class="type-btn truck-preset-btn" data-preset="standard">Estándar</button>
-        <button type="button" class="type-btn truck-preset-btn" data-preset="furgo">Furgo (Iulian)</button>
+      <label>Camión asignado (automático)</label>
+      <div class="truck-decision" id="truckDecision">
+        <strong id="truckDecisionName">Estándar</strong>
+        <div class="truck-decision-dims" id="truckDecisionDims">2,45 x 2,70 m</div>
       </div>
     </div>
-    <div class="field">
-      <label for="truckWidth">Ancho útil (m)</label>
-      <input type="number" id="truckWidth" step="0.01" value="2.45" />
-    </div>
-    <div class="field">
-      <label for="truckHeight">Alto útil (m)</label>
-      <input type="number" id="truckHeight" step="0.01" value="2.70" />
-    </div>
     <p class="hint" id="furgoLengthHint" hidden></p>
+    <p class="hint">Se elige el furgo de Iulian cuando el pedido cabe en su largo máximo (4,20 m); si no, se usa el camión estándar.</p>
     <p class="hint">Tipos de apilado:<br>
       <b>U</b> único, no se apila.<br>
       <b>D</b> remontable, se apila hasta donde llegue la altura.<br>
@@ -447,59 +447,71 @@ function fmt(n) {
   return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function getTruck() {
-  return {
-    width: parseFloat(document.getElementById('truckWidth').value) || 2.45,
-    height: parseFloat(document.getElementById('truckHeight').value) || 2.70,
-  };
-}
-
-// El estándar es el camión que más se usa; el furgo es el camión pequeño de
-// Iulian, con un largo máximo real (los demás no tienen límite en esta app).
+// El estándar es el camión que más se usa y no tiene límite de largo en esta
+// app; el furgo es el camión pequeño de Iulian, más estrecho y bajo, con un
+// largo máximo real de 4,20 m. La app decide sola cuál usar para cada
+// pedido: prueba primero el furgo (más pequeño) y solo lo elige si el
+// pedido recalculado con SU ancho/alto cabe en su largo máximo; si no, usa
+// el estándar. No es una elección manual.
 const TRUCK_PRESETS = [
-  { id: 'standard', label: 'Estándar', width: 2.45, height: 2.70 },
+  { id: 'standard', label: 'Estándar', width: 2.45, height: 2.70, maxLength: null },
   { id: 'furgo', label: 'Furgo (Iulian)', width: 2.1, height: 2.0, maxLength: 4.2 },
 ];
 
-function activeTruckPreset(truck) {
-  return (
-    TRUCK_PRESETS.find(
-      (p) => Math.abs(p.width - truck.width) < 0.005 && Math.abs(p.height - truck.height) < 0.005
-    ) || null
-  );
+function tryPackWithPreset(items, preset) {
+  try {
+    return { result: window.PalletCalc.packArticles(items, { width: preset.width, height: preset.height }), error: null };
+  } catch (err) {
+    // Algún pallet no cabe en este camión (ancho o alto insuficiente).
+    return { result: null, error: err.message };
+  }
 }
 
-function applyTruckPreset(id) {
-  const preset = TRUCK_PRESETS.find((p) => p.id === id);
-  if (!preset) return;
-  document.getElementById('truckWidth').value = preset.width;
-  document.getElementById('truckHeight').value = preset.height;
-  renderResults();
+// Decide qué camión usar para el pedido actual (por ahora, entre el estándar
+// y el furgo de Iulian; probando el más pequeño primero). Devuelve el preset
+// elegido y, si se descartó el furgo, por qué (metros que habría necesitado,
+// o el error si ni siquiera cabía algún pallet) para explicarlo en el aviso.
+function decideTruck(candidateItems) {
+  const standard = TRUCK_PRESETS.find((p) => p.id === 'standard');
+  const furgo = TRUCK_PRESETS.find((p) => p.id === 'furgo');
+  if (candidateItems.length === 0) {
+    return { preset: standard, furgoLength: null, furgoError: null };
+  }
+  const furgoAttempt = tryPackWithPreset(candidateItems, furgo);
+  if (furgoAttempt.result && furgoAttempt.result.totalLength <= furgo.maxLength + 0.005) {
+    return { preset: furgo, furgoLength: furgoAttempt.result.totalLength, furgoError: null };
+  }
+  return {
+    preset: standard,
+    furgoLength: furgoAttempt.result ? furgoAttempt.result.totalLength : null,
+    furgoError: furgoAttempt.error,
+  };
 }
 
-function syncTruckPresetButtons(truck) {
-  const active = activeTruckPreset(truck);
-  document.querySelectorAll('.truck-preset-btn').forEach((btn) => {
-    btn.classList.toggle('active', !!active && btn.dataset.preset === active.id);
-  });
-}
+function updateTruckDecisionDisplay(decision, totalLength) {
+  const { preset, furgoLength, furgoError } = decision;
 
-function updateFurgoHint(truck, totalLength) {
+  document.getElementById('truckDecisionName').textContent = preset.label;
+  document.getElementById('truckDecisionDims').textContent =
+    `${fmt(preset.width)} x ${fmt(preset.height)} m` + (preset.maxLength ? ` · máx. ${fmt(preset.maxLength)} m de largo` : '');
+
   const hint = document.getElementById('furgoLengthHint');
-  const preset = activeTruckPreset(truck);
-  if (!preset || !preset.maxLength || totalLength <= 0) {
+  if (preset.id === 'furgo') {
+    hint.hidden = false;
+    hint.classList.remove('warning');
+    hint.textContent = `Cabe en el furgo de Iulian: usa ${fmt(totalLength)} m de los ${fmt(preset.maxLength)} m que tiene, quedan ${fmt(preset.maxLength - totalLength)} m libres.`;
+  } else if (furgoLength !== null) {
+    hint.hidden = false;
+    hint.classList.add('warning');
+    hint.textContent = `No cabe en el furgo de Iulian (máx. 4,20 m): con ese camión harían falta ${fmt(furgoLength)} m. Se usa el camión estándar.`;
+  } else if (furgoError) {
+    hint.hidden = false;
+    hint.classList.add('warning');
+    hint.textContent = `No cabe en el furgo de Iulian: ${furgoError} Se usa el camión estándar.`;
+  } else {
     hint.hidden = true;
     hint.textContent = '';
     hint.classList.remove('warning');
-    return;
-  }
-  hint.hidden = false;
-  if (totalLength > preset.maxLength + 0.005) {
-    hint.classList.add('warning');
-    hint.textContent = `No cabe en el furgo (máx. ${fmt(preset.maxLength)} m): sobran ${fmt(totalLength - preset.maxLength)} m.`;
-  } else {
-    hint.classList.remove('warning');
-    hint.textContent = `Cabe en el furgo (máx. ${fmt(preset.maxLength)} m): quedan ${fmt(preset.maxLength - totalLength)} m libres.`;
   }
 }
 
@@ -550,8 +562,9 @@ function render() {
 }
 
 function renderResults() {
-  const truck = getTruck();
-  const validItems = [];
+  // 1ª pasada: validación básica (formato/cantidad), sin depender todavía
+  // de qué camión se vaya a usar.
+  const candidateItems = [];
 
   articles.forEach((article) => {
     const cell = document.querySelector(`[data-result="${article.id}"]`);
@@ -565,10 +578,26 @@ function renderResults() {
     }
 
     const qty = parseInt(article.quantity, 10);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      cell.className = 'result-cell error';
+      cell.textContent = 'Cantidad inválida';
+      return;
+    }
+    candidateItems.push({ id: article.id, name: article.name, code, quantity: qty });
+  });
+
+  // La app decide sola qué camión usar para este pedido (ver decideTruck).
+  const decision = decideTruck(candidateItems);
+  const truck = { width: decision.preset.width, height: decision.preset.height };
+
+  // 2ª pasada: con el camión ya decidido, valida que cada artículo quepa en
+  // él (ancho/alto) y muestra el error en su fila si no.
+  const validItems = [];
+  candidateItems.forEach((item) => {
+    const cell = document.querySelector(`[data-result="${item.id}"]`);
     try {
-      if (!Number.isFinite(qty) || qty <= 0) throw new Error('Cantidad inválida');
-      window.PalletCalc.computeLineResult(code, qty, truck); // valida formato y que quepa
-      validItems.push({ id: article.id, name: article.name, code, quantity: qty });
+      window.PalletCalc.computeLineResult(item.code, item.quantity, truck);
+      validItems.push(item);
     } catch (err) {
       cell.className = 'result-cell error';
       cell.textContent = err.message;
@@ -614,8 +643,7 @@ function renderResults() {
 
   const totalLength = packResult ? packResult.totalLength : 0;
   document.getElementById('grandTotalValue').textContent = `${fmt(totalLength)} m`;
-  syncTruckPresetButtons(truck);
-  updateFurgoHint(truck, totalLength);
+  updateTruckDecisionDisplay(decision, totalLength);
 
   const orderedIds = validItems.map((item) => item.id);
   window.renderTruckDiagram(document.getElementById('diagramHost'), packResult, truck, orderedIds);
@@ -636,11 +664,6 @@ function renderResults() {
 }
 
 document.getElementById('addRowBtn').addEventListener('click', addRow);
-document.getElementById('truckWidth').addEventListener('input', renderResults);
-document.getElementById('truckHeight').addEventListener('input', renderResults);
-document.querySelectorAll('.truck-preset-btn').forEach((btn) => {
-  btn.addEventListener('click', () => applyTruckPreset(btn.dataset.preset));
-});
 
 articles.push(makeRow(), makeRow(), makeRow());
 render();

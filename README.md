@@ -35,14 +35,15 @@ sus pallets dentro de las mismas columnas — puede que en una sola casilla del
 diagrama veas dos colores distintos, uno encima de otro, porque ahí caben
 pallets de dos referencias distintas.
 
-El ancho (2,45 m) y alto (2,70 m) útiles del camión son editables en el panel
-de la izquierda por si se usa con otro tipo de camión. Los botones **Estándar**
-/ **Furgo (Iulian)** rellenan esas dos casillas de golpe con las medidas de
-cada camión (el furgo es más pequeño: 2,10 x 2,00 m) — se resalta el que
-coincida con lo que haya en las casillas en cada momento. Con el furgo
-seleccionado, si el pedido no cabe en su largo máximo (4,20 m) aparece un
-aviso en rojo con cuántos metros sobran; si cabe, indica cuántos quedan
-libres.
+El panel "Camión" de la izquierda no se elige a mano: la app decide sola qué
+camión usar para el pedido actual, entre el estándar (2,45 x 2,70 m, sin
+límite de largo en esta app) y el furgo de Iulian (2,10 x 2,00 m, con un
+límite real de 4,20 m de largo). Prueba primero el furgo — recalculando todo
+el pedido con su ancho y alto — y solo lo elige si cabe en su largo máximo;
+si no cabe (o si algún pallet ni siquiera entra por ancho o alto en el
+furgo), usa el estándar. El panel muestra qué camión se ha asignado, sus
+medidas, y un aviso explicando por qué se descartó el furgo cuando no es el
+elegido.
 
 Cuando existe una segunda disposición distinta de la mejor —igual o más
 metros que la mejor opción—, se muestra al lado (a la derecha, a la misma
@@ -180,12 +181,12 @@ si su camión tiene otro ancho o alto útil distinto del estándar (2,45 x 2,70
 m), esos valores también. Ancho/alto en blanco significan "camión estándar".
 Se guarda en el navegador (`localStorage`), no en el pedido. Incluye de
 partida a los 8 transportistas ya dados de alta; Iulian tiene un camión más
-pequeño (el "furgo": 4,20 x 2,10 x 2,00 m), también seleccionable como botón
-rápido en el panel "Camión" (ver más arriba). De momento este panel solo
-sirve para mantener esos datos; todavía no se usa para nada en el cálculo —
-la idea es, más adelante, comparar el total de metros del pedido
-(recalculado con el ancho/alto de cada camión) contra su largo máximo para
-sugerir cuál transportista aprovecha mejor el camión.
+pequeño (el "furgo": 4,20 x 2,10 x 2,00 m), que es justo el que la app usa
+para decidir automáticamente entre estándar y furgo en el panel "Camión"
+(ver más arriba). De momento este panel de transportistas solo sirve para
+mantener esos datos; todavía no se usa para nada más en el cálculo — la idea
+es, más adelante, extender la misma decisión automática a todos los
+transportistas dados de alta, no solo al estándar y al furgo.
 
 ## Archivos
 
