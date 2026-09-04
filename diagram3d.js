@@ -383,6 +383,16 @@ if (typeof window !== 'undefined') {
     const labels = buildStackLabels(boxes);
     const totalLength = packResult.totalLength;
 
+    // El largo del camión (Z) se estira visualmente respecto a su ancho y
+    // alto reales — a petición del usuario, para que las filas a lo largo
+    // se distingan mejor de un vistazo — sin cambiar el ángulo de cámara,
+    // que ya distingue bien las columnas en paralelo del reparto en
+    // columnas independientes (isSplitMixed): girar la cámara hacia una
+    // vista más "de lado" en su lugar terminaba tapando una columna detrás
+    // de la otra.
+    const Z_STRETCH = 1.6;
+    const stretchedLength = totalLength * Z_STRETCH;
+
     const wrap = document.createElement('div');
     wrap.className = 'diagram3d-wrap';
     container.appendChild(wrap);
@@ -416,9 +426,9 @@ if (typeof window !== 'undefined') {
     // carga, sea cual sea el tamaño del camión o el largo total.
     const cx = truck.width / 2;
     const cy = truck.height / 2;
-    const cz = totalLength / 2;
+    const cz = stretchedLength / 2;
 
-    const truckGeo = new THREE.BoxGeometry(truck.width, truck.height, totalLength);
+    const truckGeo = new THREE.BoxGeometry(truck.width, truck.height, stretchedLength);
     const truckEdges = new THREE.LineSegments(
       new THREE.EdgesGeometry(truckGeo),
       new THREE.LineBasicMaterial({ color: 0x1a1a1a })
@@ -426,7 +436,7 @@ if (typeof window !== 'undefined') {
     scene.add(truckEdges);
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(truck.width, totalLength),
+      new THREE.PlaneGeometry(truck.width, stretchedLength),
       new THREE.MeshBasicMaterial({ color: 0xeceef2, side: THREE.DoubleSide })
     );
     floor.rotation.x = -Math.PI / 2;
@@ -435,9 +445,10 @@ if (typeof window !== 'undefined') {
 
     boxes.forEach((box) => {
       const color = colorById.get(box.refId) || DIAGRAM_PALETTE_3D[0];
-      const geo = new THREE.BoxGeometry(box.w, box.h, box.d);
+      const stretchedDepth = box.d * Z_STRETCH;
+      const geo = new THREE.BoxGeometry(box.w, box.h, stretchedDepth);
       const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.88 }));
-      mesh.position.set(box.x + box.w / 2 - cx, box.y + box.h / 2 - cy, box.z + box.d / 2 - cz);
+      mesh.position.set(box.x + box.w / 2 - cx, box.y + box.h / 2 - cy, box.z * Z_STRETCH + stretchedDepth / 2 - cz);
       scene.add(mesh);
 
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0xffffff }));
@@ -454,15 +465,19 @@ if (typeof window !== 'undefined') {
         { text: `alto ${fmtM3D(lbl.h)} m${lbl.count > 1 ? ` ×${lbl.count}` : ''}`, bold: false },
       ];
       const sprite = makeLabelSprite(lines, color);
-      sprite.position.set(lbl.x + lbl.w / 2 - cx, lbl.topY - cy + 0.22, lbl.z + lbl.d / 2 - cz);
+      sprite.position.set(lbl.x + lbl.w / 2 - cx, lbl.topY - cy + 0.22, (lbl.z + lbl.d / 2) * Z_STRETCH - cz);
       scene.add(sprite);
     });
 
     // --- Órbita manual: arrastrar para rotar, rueda para acercar/alejar,
     // sin depender de OrbitControls.js (para no añadir otra dependencia de
-    // CDN) — coordenadas esféricas clásicas alrededor del origen.
-    const maxDim = Math.max(truck.width, truck.height, totalLength);
-    let radius = maxDim * 1.6;
+    // CDN) — coordenadas esféricas clásicas alrededor del origen. El ángulo
+    // de partida se mantiene isométrico (no "de lado") porque con columnas
+    // en paralelo de distinto ancho (isSplitMixed) una vista de lado tapa
+    // una detrás de la otra; el estiramiento en Z (arriba) ya hace su parte
+    // para que las filas se vean bien sin necesidad de ese ángulo.
+    const maxDim = Math.max(truck.width, truck.height, stretchedLength);
+    let radius = maxDim * 1.55;
     let theta = Math.PI / 4;
     let phi = Math.PI / 3;
 
