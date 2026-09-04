@@ -325,6 +325,38 @@ function drawSplitMixedPlacement(svg, placement, yStart, binLength, xOffset, col
   svg.appendChild(group);
 }
 
+// Dibuja una disposición que reparte un mismo artículo en dos TRAMOS
+// CONSECUTIVOS de orientación distinta, cada uno usando todo el ancho
+// disponible (ver `enumerateRectOptions`, `isSequentialMixed`) — a
+// diferencia de `drawSplitMixedPlacement` (columnas de las dos orientaciones
+// en PARALELO, cada una a su propio ancho parcial), aquí un tramo entero usa
+// una orientación y el siguiente tramo usa la otra, uno detrás de otro en el
+// sentido del largo.
+function drawSequentialMixedPlacement(svg, placement, yStart, binLength, xOffset, color) {
+  const group = el('g', {});
+  const opt = placement.option;
+  let y = yStart;
+
+  opt.stages.forEach((stage, i) => {
+    if (stage.qty > 0) {
+      drawGroupColumns(group, y, { count: stage.N, width: stage.width, lengthDim: stage.lengthDim, levels: stage.levels, qty: stage.qty, slots: stage.slots }, color, xOffset);
+    }
+    if (i > 0) {
+      group.appendChild(el('line', { x1: xOffset, x2: xOffset + opt.usedWidth, y1: y, y2: y, class: 'article-divider' }));
+    }
+    y += stage.depth;
+  });
+
+  if (opt.length < binLength - DIAG_EPS) {
+    group.appendChild(el('rect', {
+      x: xOffset, y: yStart + opt.length, width: opt.usedWidth, height: binLength - opt.length,
+      class: 'unused-width',
+    }));
+  }
+
+  svg.appendChild(group);
+}
+
 // Dibuja un artículo (una entrada de `bin.items`) dentro de su carril,
 // ocupando de `yStart` a `yStart + opt.length`; si el tramo (bin) es más
 // largo que lo que este artículo necesita, el resto del carril se marca
@@ -334,6 +366,10 @@ function drawPlacement(svg, placement, yStart, binLength, xOffset, color) {
 
   if (opt.isSplitMixed) {
     drawSplitMixedPlacement(svg, placement, yStart, binLength, xOffset, color);
+    return;
+  }
+  if (opt.isSequentialMixed) {
+    drawSequentialMixedPlacement(svg, placement, yStart, binLength, xOffset, color);
     return;
   }
 

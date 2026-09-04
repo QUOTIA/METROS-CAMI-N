@@ -703,7 +703,12 @@ function renderResults() {
             .filter((g) => g.qty > 0)
             .map((g) => `columna de ${fmt(g.width)} m: ${g.slots} fila(s) de ${fmt(g.lengthDim)} m (${fmt(g.depth)} m)`)
             .join(' · ')
-        : `${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m`;
+        : opt.isSequentialMixed
+          ? opt.stages
+              .filter((s) => s.qty > 0)
+              .map((s) => `tramo de ${fmt(s.width)} m (${s.N} a lo ancho): ${s.slots} fila(s) de ${fmt(s.lengthDim)} m (${fmt(s.depth)} m)`)
+              .join(' luego ')
+          : `${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m`;
       cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (${opt.N} a lo ancho, ${opt.description}, ${rowsText})</span>${
         shared ? '<div class="shared-hint">comparte hueco de ancho con otro artículo en el mismo tramo</div>' : ''
       }`;

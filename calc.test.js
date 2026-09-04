@@ -397,4 +397,24 @@ function approx(a, b, msg) {
   assert.ok(opt.isSplitMixed, 'la disposición ganadora debe repartir la cantidad en columnas independientes');
 }
 
+// --- Caso real reportado: 10 pallets D de 0,80 x 1,20 x 1,00 m en un camión
+// estándar (2,45 x 2,70 m; 2 niveles posibles, 2,70/1,00=2). Repartir las dos
+// orientaciones EN PARALELO (1 columna de 0,80 m + 1 de 1,20 m, cada una a su
+// propio largo, como en el caso anterior) da 2,40 m — pero aquí compensa más
+// repartirlas EN SERIE: un tramo entero de 3 columnas de 0,80 m (todo el
+// ancho, no solo 1) para 6 pallets (3×2 niveles = exactamente 1 fila de
+// 1,20 m), seguido de otro tramo entero de 2 columnas de 1,20 m para los 4
+// restantes (2×2 niveles = exactamente 1 fila de 0,80 m): 1,20+0,80=2,00 m,
+// menos que el reparto en paralelo porque usa todo el ancho en cada tramo en
+// vez de solo una columna parcial de cada orientación a la vez. ---
+{
+  const truck = { width: 2.45, height: 2.70 };
+  const result = packArticles([{ id: 1, name: 'Solo', code: '080x120x100xD', quantity: 10 }], truck);
+  approx(result.totalLength, 2.0, 'dos tramos consecutivos a todo el ancho: 1,20 m + 0,80 m');
+  const opt = result.bins[0].items[0].option;
+  assert.ok(opt.isSequentialMixed, 'la disposición ganadora debe repartir la cantidad en dos tramos consecutivos');
+  assert.strictEqual(opt.stages[0].qty, 6, 'el primer tramo (3 columnas de 0,80 m) lleva 6 pallets');
+  assert.strictEqual(opt.stages[1].qty, 4, 'el segundo tramo (2 columnas de 1,20 m) lleva los 4 restantes');
+}
+
 console.log('Todos los tests pasaron correctamente.');

@@ -133,6 +133,30 @@ hueco sin usar hasta llegar al largo de la más profunda. (Los pallets de
 tipo P no mezclan orientación: la base de la pirámide necesita columnas del
 mismo ancho para que la fila de arriba encaje.)
 
+Además de mezclar las dos orientaciones EN PARALELO (columnas de cada una
+conviviendo a la vez, cada una a su propio ancho parcial, como en el ejemplo
+anterior), a veces compensa más repartirlas EN SERIE: un tramo entero
+usando TODO el ancho disponible con una orientación, seguido de otro tramo
+usando todo el ancho con la otra — en vez de que ambas convivan todo el
+rato ocupando solo una parte del ancho cada una. Compensa cuando las
+cantidades caben justas en un tramo completo de cada orientación, ya que
+usar el ancho entero por turnos necesita menos filas que ir con columnas
+parciales todo el tiempo.
+
+Ejemplo real: 10 pallets de 0,80 x 1,20 m (tipo D, 2 niveles) en un camión
+estándar. En paralelo (1 columna de 0,80 m + 1 de 1,20 m, cada una a su
+propio largo) da 2,40 m. Pero en serie — un tramo de 3 columnas de 0,80 m
+(todo el ancho, no solo 1) para 6 pallets (3 columnas × 2 niveles = justo
+una fila de 1,20 m), seguido de otro tramo de 2 columnas de 1,20 m para los
+4 restantes (2 columnas × 2 niveles = justo una fila de 0,80 m) — da
+1,20 + 0,80 = 2,00 m, menos que en paralelo. La app calcula ambos modelos
+(`isSplitMixed` en paralelo e `isSequentialMixed` en serie) como opciones
+distintas y usa el que dé menos metros en cada caso; ninguno sustituye al
+otro, porque cada uno gana en circunstancias distintas (en paralelo suele
+ganar con cantidades grandes que necesitan muchas filas de cada
+orientación; en serie, cuando las cantidades caben justas en un tramo
+completo de cada una).
+
 ## Cómo se combinan varios artículos en el mismo tramo
 
 Si dos (o tres) artículos caben juntos a lo ancho del camión —aunque sea
@@ -272,9 +296,11 @@ opacidad del relleno.
 
 La geometría (`diagram3d.js`, función `buildPalletBoxes`) recorre el mismo
 `packResult` de `calc.js` que la vista 2D (`diagram.js`), traduciendo cada
-tipo de colocación (rejilla U/D, pirámide P, columnas independientes de
-`isSplitMixed`, bloque combinado por huella compartida y apilado vertical
-entre huellas distintas) a cajas 3D con la altura real de cada pallet — no
+tipo de colocación (rejilla U/D, pirámide P, columnas independientes en
+paralelo de `isSplitMixed`, tramos consecutivos a todo el ancho de
+`isSequentialMixed`, bloque combinado por huella compartida y apilado
+vertical entre huellas distintas) a cajas 3D con la altura real de cada
+pallet — no
 depende del DOM ni de Three.js, así que se puede probar con Node igual que
 `distributeColumns` (`diagram3d.test.js`).
 

@@ -196,6 +196,57 @@ function enumerateRectOptions(pallet, quantity, truck) {
       });
     }
   }
+
+  // Además de repartir las dos orientaciones EN PARALELO (columnas de cada
+  // una conviviendo a la vez, cada una a su propio ancho parcial — ver
+  // arriba), a veces compensa más repartirlas en SERIE: un tramo usando TODO
+  // el ancho disponible con la orientación A (su máximo de columnas, no solo
+  // las que caben junto a B) seguido de otro tramo usando todo el ancho con
+  // la orientación B. Esto puede batir al reparto en paralelo cuando ambas
+  // cantidades caben en un único tramo completo cada una — usar el ancho
+  // entero por turnos evita las columnas parciales del reparto en paralelo,
+  // que necesitan más filas por ir más estrechas. Ejemplo real: pallet de
+  // 0,80x1,20 D (2 niveles), 10 uds, camión estándar — en paralelo (1 columna
+  // de 0,80 m + 1 de 1,20 m, cada una a su propio largo) da 2,40 m; en serie
+  // (3 columnas de 0,80 m para 6 uds = 1 fila de 1,20 m, luego 2 columnas de
+  // 1,20 m para las 4 restantes = 1 fila de 0,80 m) da solo 1,20+0,80 = 2,00 m.
+  if (hasSecond) {
+    const maxAFull = floorDiv(truck.width, widthA);
+    const maxBFull = floorDiv(truck.width, widthB);
+    if (maxAFull >= 1 && maxBFull >= 1) {
+      const perSlotAFull = maxAFull * levels;
+      const perSlotBFull = maxBFull * levels;
+      let bestSeq = null;
+      for (let qA = 0; qA <= quantity; qA++) {
+        const qB = quantity - qA;
+        const slotsA = qA > 0 ? ceilDiv(qA, perSlotAFull) : 0;
+        const slotsB = qB > 0 ? ceilDiv(qB, perSlotBFull) : 0;
+        const length = slotsA * lengthA + slotsB * lengthB;
+        if (!bestSeq || length < bestSeq.length - EPS) {
+          bestSeq = { qA, qB, slotsA, slotsB, length };
+        }
+      }
+
+      // Si el reparto óptimo deja un tramo vacío, es idéntico a una opción de
+      // una sola orientación que ya está en la lista — no hace falta añadirla
+      // otra vez.
+      if (bestSeq.qA > 0 && bestSeq.qB > 0) {
+        const usedWidth = Math.max(maxAFull * widthA, maxBFull * widthB);
+        options.push({
+          width: widthA, lengthDim: Math.max(lengthA, lengthB), N: Math.max(maxAFull, maxBFull), levels,
+          description: `${bestSeq.qA}+${bestSeq.qB} pallet(s) en dos tramos consecutivos (todo el ancho: ` +
+            `${maxAFull}×${widthA.toFixed(2)} m, luego ${maxBFull}×${widthB.toFixed(2)} m) x ${levels} nivel(es) (${stackWord})`,
+          slots: bestSeq.slotsA + bestSeq.slotsB, length: bestSeq.length, usedWidth,
+          isSequentialMixed: true,
+          stages: [
+            { N: maxAFull, width: widthA, lengthDim: lengthA, qty: bestSeq.qA, slots: bestSeq.slotsA, depth: bestSeq.slotsA * lengthA, levels },
+            { N: maxBFull, width: widthB, lengthDim: lengthB, qty: bestSeq.qB, slots: bestSeq.slotsB, depth: bestSeq.slotsB * lengthB, levels },
+          ],
+        });
+      }
+    }
+  }
+
   return options;
 }
 
@@ -508,6 +559,9 @@ function applyVerticalPairing(soloItems, truck) {
 // necesario para no confundir "2 columnas de 0,80" con "1 de 1,30 + 1 de
 // 0,80" cuando ambas tienen el mismo N y el mismo largo de fila.
 function optionShapeKey(opt) {
+  if (opt.isSequentialMixed) {
+    return opt.stages.map((s) => `${s.N}x${s.width.toFixed(6)}x${s.lengthDim.toFixed(6)}x${s.slots}`).join('>');
+  }
   const widths = opt.columnWidths ? opt.columnWidths.slice().sort((a, b) => a - b) : [opt.width];
   return widths.map((w) => w.toFixed(6)).join(',');
 }

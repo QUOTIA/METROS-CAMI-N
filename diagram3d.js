@@ -100,6 +100,26 @@ function addSplitMixedPlacement(boxes, pallet, opt, xOffset, zStart, refId) {
   });
 }
 
+// Dos tramos consecutivos de orientación distinta, cada uno usando todo el
+// ancho disponible (`isSequentialMixed`, ver calc.js) — a diferencia de
+// `addSplitMixedPlacement` (columnas en paralelo, cada una a su propio ancho
+// parcial), aquí cada tramo entero avanza en Z uno detrás del otro.
+function addSequentialMixedPlacement(boxes, pallet, opt, xOffset, zStart, refId) {
+  let z = zStart;
+  opt.stages.forEach((stage) => {
+    if (stage.qty > 0) {
+      const stageOpt = {
+        N: stage.N, width: stage.width, lengthDim: stage.lengthDim, levels: stage.levels,
+        perSlot: stage.N * stage.levels, slots: stage.slots,
+        columnWidths: new Array(stage.N).fill(stage.width),
+        columnLengths: new Array(stage.N).fill(stage.lengthDim),
+      };
+      addGridPlacement(boxes, pallet, stageOpt, stage.qty, xOffset, z, refId);
+    }
+    z += stage.depth;
+  });
+}
+
 // Bloque combinado por huella compartida (`packFootprintFamily`): las filas
 // de pirámide igual que arriba, y las filas normales apilan de verdad, en Y,
 // las referencias distintas que comparten columna (`columnBins`), cada una
@@ -196,6 +216,8 @@ function buildPalletBoxes(packResult) {
         addVerticalComboPlacement(localBoxes, placement);
       } else if (opt.isSplitMixed) {
         addSplitMixedPlacement(localBoxes, placement.pallet, opt, 0, 0, placement.id);
+      } else if (opt.isSequentialMixed) {
+        addSequentialMixedPlacement(localBoxes, placement.pallet, opt, 0, 0, placement.id);
       } else if (placement.pallet.type === 'P') {
         addPyramidPlacement(localBoxes, placement.pallet, opt, placement.quantity, 0, 0, placement.id);
       } else {

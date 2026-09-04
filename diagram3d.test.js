@@ -141,4 +141,28 @@ function approxEq(a, b) {
   assert.strictEqual(widths.filter((w) => approxEq(w, 1.3)).length, 4, '4 pallets en la columna de 1,30 m de ancho');
 }
 
+// --- Dos tramos consecutivos a todo el ancho (isSequentialMixed) ----------
+// Mismo escenario que calc.test.js: D de 0,80x1,20x1,00 m, 10 uds, camión
+// estándar — 6 en un tramo (z bajo) de 3 columnas de 0,80 m, 4 en el
+// siguiente tramo (z más alto, después de la profundidad del primero) de 2
+// columnas de 1,20 m. Los dos tramos van uno detrás del otro en Z (no en
+// paralelo en X, como en isSplitMixed), y cada pallet lleva su alto real.
+{
+  const truck = { width: 2.45, height: 2.70 };
+  const result = packArticles([{ id: 1, name: 'Solo', code: '080x120x100xD', quantity: 10 }], truck);
+  const opt = result.bins[0].items[0].option;
+  assert.ok(opt.isSequentialMixed, 'este escenario debe resolverse con dos tramos consecutivos');
+
+  const boxes = buildPalletBoxes(result);
+  assert.strictEqual(boxes.length, 10, 'las 10 unidades deben producir 10 cajas, ninguna se pierde');
+  assert.ok(boxes.every((b) => approxEq(b.h, 1.0)), 'todas las cajas usan la altura real del pallet');
+
+  const firstStage = boxes.filter((b) => approxEq(b.w, 0.8));
+  const secondStage = boxes.filter((b) => approxEq(b.w, 1.2));
+  assert.strictEqual(firstStage.length, 6, 'el primer tramo (3 columnas de 0,80 m) lleva 6 pallets');
+  assert.strictEqual(secondStage.length, 4, 'el segundo tramo (2 columnas de 1,20 m) lleva 4 pallets');
+  assert.ok(firstStage.every((b) => b.z < 1.2 - 1e-6), 'el primer tramo ocupa el z más bajo (su propia profundidad de 1,20 m)');
+  assert.ok(secondStage.every((b) => b.z >= 1.2 - 1e-6), 'el segundo tramo empieza justo donde termina el primero, no en z=0');
+}
+
 console.log('Todos los tests de diagram3d.js pasaron correctamente.');
