@@ -95,6 +95,30 @@ function approx(actual, expected, msg) {
   });
 }
 
+// --- Bloque combinado con filas normales en DOS orientaciones distintas
+// (isMixedPlainRows) --------------------------------------------------------
+// Mismo escenario que calc.test.js: 10 D + 6 U de la misma base 1,20x0,80 m,
+// mismo alto (1,00 m) — 11 columnas repartidas en 9 (3 filas de 0,80 m de
+// ancho) + 2 (1 fila de 1,20 m de ancho). Todas las cajas deben usar la
+// altura real (1,00 m) y aparecer columnas de las DOS anchuras.
+{
+  const truck = { width: 2.45, height: 2.70 };
+  const items = [
+    { id: 1, name: 'RefD', code: '120x80x100xD', quantity: 10 },
+    { id: 2, name: 'RefU', code: '120x80x100xU', quantity: 6 },
+  ];
+  const result = packArticles(items, truck);
+  const opt = result.bins[0].items[0].option;
+  assert.ok(opt.isMixedPlainRows, 'este escenario debe resolverse con filas normales en dos orientaciones');
+
+  const boxes = buildPalletBoxes(result);
+  assert.strictEqual(boxes.length, 16, 'las 16 unidades (10+6) deben producir 16 cajas, ninguna se pierde');
+  assert.ok(boxes.every((b) => approxEq(b.h, 1.0)), 'todas las cajas usan la altura real del pallet (1,00 m)');
+
+  const widths = new Set(boxes.map((b) => Number(b.w.toFixed(4))));
+  assert.ok(widths.has(0.8) && widths.has(1.2), 'deben aparecer columnas de las dos anchuras (0,80 m y 1,20 m)');
+}
+
 // --- Apilado vertical entre huellas distintas (applyVerticalPairing) ------
 // Mismo escenario que calc.test.js: U ancho (alto 1,50) de base + D pequeño
 // (alto 1,00) encima, 3 columnas combinadas — el de encima debe quedar a

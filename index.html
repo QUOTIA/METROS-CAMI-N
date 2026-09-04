@@ -684,7 +684,16 @@ function renderResults() {
         .filter((m) => m.id !== item.id)
         .map((m) => m.name || m.code)
         .join(', ');
-      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (bloque combinado, ${opt.N} a lo ancho, ${opt.rows} fila(s) de ${fmt(opt.lengthDim)} m)</span>
+      const pyramidText = opt.pyramidGroups.length > 0
+        ? `${opt.pyramidGroups.length} fila(s) en pirámide (${opt.N} a lo ancho) + `
+        : '';
+      // Las filas normales pueden repartirse en más de una orientación
+      // (isMixedPlainRows) cuando eso deja menos hueco sin usar que forzarlas
+      // todas a la misma orientación que la fila piramidal.
+      const plainText = opt.plainRowGroups
+        .map((g) => `${g.rowsCount} fila(s) de ${fmt(g.lengthDim)} m (${g.N} a lo ancho de ${fmt(g.width)} m)`)
+        .join(' luego ');
+      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (bloque combinado, ${pyramidText}${plainText})</span>
         <div class="shared-hint">misma base que ${otherNames}: se apilan mezclados en la misma columna</div>`;
     } else if (kind === 'verticalCombo') {
       const other = role === 'base' ? placement.topper : placement.base;

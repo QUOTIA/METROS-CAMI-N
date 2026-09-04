@@ -417,4 +417,28 @@ function approx(a, b, msg) {
   assert.strictEqual(opt.stages[1].qty, 4, 'el segundo tramo (2 columnas de 1,20 m) lleva los 4 restantes');
 }
 
+// --- Caso real reportado: mismo huella bloque combinado (packFootprintFamily)
+// con 10 D de 1,20x0,80x1,00 m + 6 U de la misma base y alto. D se apila de 2
+// en 2 (2,70/1,00=2 niveles) -> 5 columnas; los 6 U van cada uno solo -> 6
+// columnas más: 11 columnas en total. Ni 2 columnas de 1,20 m (6 filas de
+// 0,80 m = 4,80 m) ni 3 de 0,80 m (4 filas de 1,20 m = 4,80 m) dividen 11
+// exacto. Pero repartiendo las columnas en DOS TRAMOS con distinta
+// orientación — 9 columnas en 3 filas de 0,80 m (3×1,20 m = 3,60 m) + las 2
+// restantes en 1 fila de 1,20 m (2×0,80 m = 0,80 m) — da 3,60+0,80=4,40 m,
+// menos que forzar una sola orientación para todo el bloque. ---
+{
+  const truck = { width: 2.45, height: 2.70 };
+  const items = [
+    { id: 1, name: 'RefD', code: '120x80x100xD', quantity: 10 },
+    { id: 2, name: 'RefU', code: '120x80x100xU', quantity: 6 },
+  ];
+  const result = packArticles(items, truck);
+  approx(result.totalLength, 4.4, 'bloque combinado en dos tramos de distinta orientación: 3,60 m + 0,80 m');
+  const opt = result.bins[0].items[0].option;
+  assert.ok(opt.isMixedPlainRows, 'las filas normales del bloque deben repartirse en dos orientaciones distintas');
+  assert.strictEqual(opt.plainRowGroups.length, 2, 'debe haber dos grupos de filas, uno por orientación');
+  const totalPlainColumns = opt.plainRowGroups.reduce((sum, g) => sum + g.columnBins.length, 0);
+  assert.strictEqual(totalPlainColumns, 11, 'las 11 columnas (5 D apiladas + 6 U sueltos) deben repartirse entre los dos grupos');
+}
+
 console.log('Todos los tests pasaron correctamente.');

@@ -346,6 +346,7 @@ function packHeightsFFD(pool, truckHeight) {
 function packFootprintFamily(articles, truck) {
   const { dimA, dimB } = articles[0].pallet;
   const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
+  const hasSecond = orientations.length === 2;
 
   const pPool = [];
   const stackablePool = []; // D
@@ -358,7 +359,8 @@ function packFootprintFamily(articles, truck) {
   }
 
   let best = null;
-  for (const [width, lengthDim] of orientations) {
+  for (let oi = 0; oi < orientations.length; oi++) {
+    const [width, lengthDim] = orientations[oi];
     const N = floorDiv(truck.width, width);
     if (N < 1) continue;
 
@@ -378,13 +380,64 @@ function packFootprintFamily(articles, truck) {
     const soloBins = soloPool.map((item) => ({ items: [item] }));
     const columnBins = [...stackBins, ...soloBins].map((b) => b.items);
 
-    const plainRows = columnBins.length === 0 ? 0 : Math.ceil(columnBins.length / N);
-    const rows = numPyramidRows + plainRows;
-    const length = rows * lengthDim;
-    const usedWidth = N * width;
+    // Candidato "puro": todas las columnas normales (no piramidales) en
+    // filas de ESTA orientación.
+    const pureRows = columnBins.length === 0 ? 0 : ceilDiv(columnBins.length, N);
+    let plainRowGroups = columnBins.length === 0 ? [] : [{ N, width, lengthDim, rowsCount: pureRows, columnBins }];
+    let plainLength = pureRows * lengthDim;
 
-    if (!best || length < best.length - EPS) {
-      best = { width, lengthDim, N, rows, length, usedWidth, pyramidGroups, columnBins, isFamily: true };
+    // Candidato "mixto": las columnas normales (las piramidales sí necesitan
+    // esta orientación, para que la fila de arriba encaje) se reparten en
+    // DOS TRAMOS CONSECUTIVOS — uno a todo el ancho con esta orientación,
+    // otro a todo el ancho con la otra — igual que en `enumerateRectOptions`
+    // (`isSequentialMixed`): bate al reparto "todo en una orientación"
+    // cuando el resto no llena un número entero de filas con ninguna de las
+    // dos por separado. Ejemplo real: 11 columnas normales (D+U) en un
+    // camión de 2,45 m — 2 columnas de 1,20 m ó 3 de 0,80 m no dividen 11
+    // exacto (dan 4,80 m con cualquiera de las dos), pero 9 columnas en 3
+    // filas de 0,80 m + las 2 restantes en 1 fila de 1,20 m dan 4,40 m.
+    if (hasSecond && columnBins.length > 0) {
+      const [otherWidth, otherLengthDim] = orientations[1 - oi];
+      const otherN = floorDiv(truck.width, otherWidth);
+      if (otherN >= 1) {
+        let bestSplit = null;
+        for (let k = 0; k <= columnBins.length; k++) {
+          const rest = columnBins.length - k;
+          const rowsA = k > 0 ? ceilDiv(k, N) : 0;
+          const rowsB = rest > 0 ? ceilDiv(rest, otherN) : 0;
+          const splitLength = rowsA * lengthDim + rowsB * otherLengthDim;
+          if (!bestSplit || splitLength < bestSplit.length - EPS) {
+            bestSplit = { k, rowsA, rowsB, length: splitLength };
+          }
+        }
+        if (bestSplit.length < plainLength - EPS) {
+          plainLength = bestSplit.length;
+          plainRowGroups = [];
+          if (bestSplit.k > 0) {
+            plainRowGroups.push({ N, width, lengthDim, rowsCount: bestSplit.rowsA, columnBins: columnBins.slice(0, bestSplit.k) });
+          }
+          if (columnBins.length - bestSplit.k > 0) {
+            plainRowGroups.push({
+              N: otherN, width: otherWidth, lengthDim: otherLengthDim, rowsCount: bestSplit.rowsB,
+              columnBins: columnBins.slice(bestSplit.k),
+            });
+          }
+        }
+      }
+    }
+
+    const rows = numPyramidRows + plainRowGroups.reduce((sum, g) => sum + g.rowsCount, 0);
+    const length = numPyramidRows * lengthDim + plainLength;
+    const usedWidth = Math.max(N * width, ...plainRowGroups.map((g) => g.N * g.width));
+    const isMixedPlainRows = plainRowGroups.length > 1 || plainRowGroups.some((g) => g.width !== width);
+
+    const candidate = {
+      width, lengthDim, N, rows, length, usedWidth, pyramidGroups, columnBins,
+      isFamily: true, plainRowGroups, isMixedPlainRows,
+    };
+
+    if (!best || candidate.length < best.length - EPS) {
+      best = candidate;
     }
   }
 
@@ -755,7 +808,7 @@ function placementSignature(item) {
       : [item.id];
   const opt = item.option;
   const shape = item.isFamily
-    ? `F,rows${opt.rows},N${opt.N},${opt.width.toFixed(4)}x${opt.lengthDim.toFixed(4)}`
+    ? `F,rows${opt.rows},${opt.plainRowGroups.map((g) => `${g.N}x${g.width.toFixed(4)}x${g.rowsCount}`).join('>')}`
     : item.isVerticalCombo
       ? `VC,N${opt.N},slots${opt.slots},${optionShapeKey(opt)}x${opt.lengthDim.toFixed(4)}`
       : `N${opt.N},slots${opt.slots},${optionShapeKey(opt)}x${opt.lengthDim.toFixed(4)}`;

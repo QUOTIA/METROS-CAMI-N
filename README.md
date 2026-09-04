@@ -231,6 +231,19 @@ Esto no es una búsqueda exhaustiva de todas las formas de repartir alturas
 pero cubre bien el caso típico de referencias con bases idénticas y alturas
 parecidas.
 
+Las columnas resultantes (cada una ya con su combinación de alturas decidida)
+todavía tienen que repartirse en filas a lo ancho del camión, y aquí también
+aplica la idea de `isSequentialMixed`: en vez de forzar TODAS las filas
+normales a una única orientación, se prueba también repartirlas en dos
+tramos consecutivos — uno a todo el ancho con una orientación, el siguiente
+a todo el ancho con la otra — y se usa el que dé menos metros. Ejemplo real:
+10 pallets D (se apilan de 2 en 2) + 6 pallets U de la misma base 1,20 x
+0,80 m dan 5+6=11 columnas. Ni 2 columnas de 1,20 m (6 filas de 0,80 m =
+4,80 m) ni 3 de 0,80 m (4 filas de 1,20 m = 4,80 m) dividen 11 exacto, pero
+9 columnas en 3 filas de 0,80 m (3,60 m) + las 2 restantes en 1 fila de
+1,20 m (0,80 m) dan 4,40 m — menos que forzar una sola orientación para todo
+el bloque.
+
 ## Apilado vertical entre artículos de base DISTINTA
 
 La sección anterior cubre artículos que comparten EXACTAMENTE la misma base.

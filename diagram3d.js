@@ -125,43 +125,49 @@ function addSequentialMixedPlacement(boxes, pallet, opt, xOffset, zStart, refId)
 // las referencias distintas que comparten columna (`columnBins`), cada una
 // con su propia altura real.
 function addFamilyPlacement(boxes, placement) {
-  const { N, width, lengthDim, rows, pyramidGroups, columnBins } = placement.option;
+  const { pyramidGroups, plainRowGroups = [] } = placement.option;
+  let z = 0;
 
-  for (let r = 0; r < rows; r++) {
-    const slotZ = r * lengthDim;
+  pyramidGroups.forEach(({ base, top }) => {
+    const { N, width, lengthDim } = placement.option;
+    for (let c = 0; c < N; c++) {
+      const item = base[c];
+      if (!item) continue;
+      boxes.push({ refId: item.id, x: c * width, y: 0, z, w: width, h: item.height, d: lengthDim });
+    }
+    const topW = width * 0.6;
+    const topD = lengthDim * 0.6;
+    for (let c = 0; c < N - 1; c++) {
+      const item = top[c];
+      if (!item) continue;
+      const baseItem = base[c] || base[c + 1];
+      const y = baseItem ? baseItem.height : 0;
+      const x = (c + 1) * width - topW / 2;
+      const zz = z + (lengthDim - topD) / 2;
+      boxes.push({ refId: item.id, x, y, z: zz, w: topW, h: item.height, d: topD });
+    }
+    z += lengthDim;
+  });
 
-    if (r < pyramidGroups.length) {
-      const { base, top } = pyramidGroups[r];
-      for (let c = 0; c < N; c++) {
-        const item = base[c];
-        if (!item) continue;
-        boxes.push({ refId: item.id, x: c * width, y: 0, z: slotZ, w: width, h: item.height, d: lengthDim });
-      }
-      const topW = width * 0.6;
-      const topD = lengthDim * 0.6;
-      for (let c = 0; c < N - 1; c++) {
-        const item = top[c];
-        if (!item) continue;
-        const baseItem = base[c] || base[c + 1];
-        const y = baseItem ? baseItem.height : 0;
-        const x = (c + 1) * width - topW / 2;
-        const z = slotZ + (lengthDim - topD) / 2;
-        boxes.push({ refId: item.id, x, y, z, w: topW, h: item.height, d: topD });
-      }
-    } else {
-      const plainRow = r - pyramidGroups.length;
-      const rowBins = columnBins.slice(plainRow * N, (plainRow + 1) * N);
+  // Las filas normales (D + P sueltos) pueden repartirse en más de un grupo
+  // con su PROPIA orientación (`isMixedPlainRows`, ver
+  // `packFootprintFamily`) cuando eso deja menos hueco sin usar.
+  plainRowGroups.forEach((rowGroup) => {
+    const { N, width, lengthDim, columnBins } = rowGroup;
+    for (let r = 0; r < rowGroup.rowsCount; r++) {
+      const rowBins = columnBins.slice(r * N, (r + 1) * N);
       for (let c = 0; c < N; c++) {
         const stackItems = rowBins[c];
         if (!stackItems || stackItems.length === 0) continue;
         let yCursor = 0;
         stackItems.forEach((item) => {
-          boxes.push({ refId: item.id, x: c * width, y: yCursor, z: slotZ, w: width, h: item.height, d: lengthDim });
+          boxes.push({ refId: item.id, x: c * width, y: yCursor, z, w: width, h: item.height, d: lengthDim });
           yCursor += item.height;
         });
       }
+      z += lengthDim;
     }
-  }
+  });
 }
 
 // Apilado vertical entre dos artículos de huella distinta

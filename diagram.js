@@ -187,56 +187,75 @@ function drawNestedRow(group, slotY, N, width, lengthDim, xOffset, items, colorB
 // cuando hace falta.
 function drawFamilyPlacement(svg, placement, yStart, binLength, xOffset, colorById) {
   const group = el('g', {});
-  const { N, width, lengthDim, rows, pyramidGroups, columnBins } = placement.option;
+  const opt = placement.option;
+  const { pyramidGroups, plainRowGroups = [] } = opt;
+  let y = yStart;
+  let firstRowOverall = true;
 
-  for (let r = 0; r < rows; r++) {
-    const slotY = yStart + r * lengthDim;
-
-    if (r < pyramidGroups.length) {
-      const { base, top } = pyramidGroups[r];
-      for (let c = 0; c < N; c++) {
-        const x = xOffset + c * width;
-        const item = base[c];
-        if (item) {
-          group.appendChild(el('rect', {
-            x, y: slotY, width, height: lengthDim, class: 'pallet-cell',
-            fill: colorById.get(item.id) || DIAGRAM_PALETTE[0], 'fill-opacity': 0.55,
-          }));
-          labelCell(group, x, slotY, width, lengthDim);
-        } else {
-          group.appendChild(el('rect', {
-            x, y: slotY, width, height: lengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
-          }));
-        }
-      }
-      if (N >= 2) drawNestedRow(group, slotY, N, width, lengthDim, xOffset, top, colorById);
-    } else {
-      const plainRow = r - pyramidGroups.length;
-      const rowBins = columnBins.slice(plainRow * N, (plainRow + 1) * N);
-      for (let c = 0; c < N; c++) {
-        const x = xOffset + c * width;
-        const stackItems = rowBins[c];
-        if (stackItems && stackItems.length > 0) {
-          drawStackCell(group, x, slotY, width, lengthDim, stackItems, colorById);
-        } else {
-          group.appendChild(el('rect', {
-            x, y: slotY, width, height: lengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
-          }));
-        }
-      }
+  // Línea entre filas: normal salvo justo donde empieza un grupo de filas
+  // normales con una orientación DISTINTA a la anterior (isMixedPlainRows) —
+  // ahí una línea más marcada deja claro que a partir de ese punto cambia el
+  // ancho de columna.
+  function divider(x2, isGroupBoundary) {
+    if (firstRowOverall) {
+      firstRowOverall = false;
+      return;
     }
-
-    if (r > 0) {
-      group.appendChild(el('line', {
-        x1: xOffset, x2: xOffset + N * width, y1: slotY, y2: slotY, class: 'slot-divider',
-      }));
-    }
+    group.appendChild(el('line', {
+      x1: xOffset, x2, y1: y, y2: y, class: isGroupBoundary ? 'article-divider' : 'slot-divider',
+    }));
   }
 
-  if (placement.option.length < binLength - DIAG_EPS) {
+  pyramidGroups.forEach(({ base, top }) => {
+    const { N, width, lengthDim } = opt;
+    divider(xOffset + N * width, false);
+    for (let c = 0; c < N; c++) {
+      const x = xOffset + c * width;
+      const item = base[c];
+      if (item) {
+        group.appendChild(el('rect', {
+          x, y, width, height: lengthDim, class: 'pallet-cell',
+          fill: colorById.get(item.id) || DIAGRAM_PALETTE[0], 'fill-opacity': 0.55,
+        }));
+        labelCell(group, x, y, width, lengthDim);
+      } else {
+        group.appendChild(el('rect', {
+          x, y, width, height: lengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+        }));
+      }
+    }
+    if (N >= 2) drawNestedRow(group, y, N, width, lengthDim, xOffset, top, colorById);
+    y += lengthDim;
+  });
+
+  // Las filas normales (D + P sueltos) pueden repartirse en más de un grupo
+  // con su PROPIA orientación (`isMixedPlainRows`, ver `packFootprintFamily`)
+  // cuando eso deja menos hueco sin usar que forzarlas todas a la misma
+  // orientación que la fila piramidal.
+  plainRowGroups.forEach((rowGroup, gi) => {
+    const { N: gN, width: gWidth, lengthDim: gLengthDim, columnBins: gBins } = rowGroup;
+    for (let r = 0; r < rowGroup.rowsCount; r++) {
+      divider(xOffset + gN * gWidth, gi > 0 && r === 0);
+      const rowBins = gBins.slice(r * gN, (r + 1) * gN);
+      for (let c = 0; c < gN; c++) {
+        const x = xOffset + c * gWidth;
+        const stackItems = rowBins[c];
+        if (stackItems && stackItems.length > 0) {
+          drawStackCell(group, x, y, gWidth, gLengthDim, stackItems, colorById);
+        } else {
+          group.appendChild(el('rect', {
+            x, y, width: gWidth, height: gLengthDim, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+          }));
+        }
+      }
+      y += gLengthDim;
+    }
+  });
+
+  if (opt.length < binLength - DIAG_EPS) {
     group.appendChild(el('rect', {
-      x: xOffset, y: yStart + placement.option.length, width: placement.option.usedWidth,
-      height: binLength - placement.option.length, class: 'unused-width',
+      x: xOffset, y: yStart + opt.length, width: opt.usedWidth,
+      height: binLength - opt.length, class: 'unused-width',
     }));
   }
 
