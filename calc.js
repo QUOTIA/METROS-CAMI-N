@@ -303,6 +303,169 @@ function packFootprintFamily(articles, truck) {
   return best;
 }
 
+// --- Apilado vertical entre artículos de huella DISTINTA -------------------
+//
+// `packFootprintFamily` ya mezcla en la misma columna artículos que
+// comparten EXACTAMENTE la misma huella (ancho x largo). Pero dos artículos
+// con huellas distintas también pueden ir uno encima del otro si el de
+// arriba cabe dentro de la huella del de abajo y las alturas suman menos
+// que el alto útil del camión — por ejemplo, un pallet U ancho con hueco de
+// altura de sobra puede servir de base a un pallet D más pequeño, en vez de
+// dejar ese hueco vacío.
+//
+// Reglas de quién puede ser base/encima (más estrictas que "cabe si cabe"):
+// - U puede ser BASE (algo puede apoyarse encima suyo), pero nunca puede
+//   estar ENCIMA de otro ni doblarse consigo mismo — coherente con que "no
+//   se puede remontar" se refiera a remontar el propio U, no a que su hueco
+//   de altura sobrante deba quedar vacío.
+// - D puede ser base o estar encima.
+// - P mantiene su propio modelo (base + fila piramidal encima, con nidos
+//   entre las columnas de la propia base) y no se combina en vertical con
+//   otro artículo en esta versión — su geometría no es una pila simple de
+//   dos cajas.
+function canBeVerticalBase(type) {
+  return type === 'U' || type === 'D';
+}
+function canBeVerticalTopper(type) {
+  return type === 'D';
+}
+
+function palletOrientations(pallet) {
+  return pallet.dimA === pallet.dimB
+    ? [[pallet.dimA, pallet.dimB]]
+    : [[pallet.dimA, pallet.dimB], [pallet.dimB, pallet.dimA]];
+}
+
+// Enumera, para una pareja base+encima ya validada (huellas compatibles y
+// alturas que suman dentro del camión), las disposiciones posibles de sus
+// columnas combinadas — análogo a `enumerateRectOptions`, pero cada columna
+// lleva SIEMPRE un par (1 de la base + 1 de encima), nunca una unidad suelta
+// de cualquiera de los dos (los sueltos, si sobran, se tratan aparte).
+function enumerateVerticalComboOptions(basePallet, topperPallet, comboQty, truck) {
+  if (!canBeVerticalBase(basePallet.type) || !canBeVerticalTopper(topperPallet.type)) return [];
+  if (basePallet.height + topperPallet.height > truck.height + EPS) return [];
+
+  const baseOrientations = palletOrientations(basePallet);
+  const topperOrientations = palletOrientations(topperPallet);
+
+  const options = [];
+  for (const [bw, bl] of baseOrientations) {
+    const fitsSomeOrientation = topperOrientations.some(([tw, tl]) => tw <= bw + EPS && tl <= bl + EPS);
+    if (!fitsSomeOrientation) continue;
+
+    const NMax = floorDiv(truck.width, bw);
+    for (let N = 1; N <= NMax; N++) {
+      const perSlot = N; // un par (base + encima) por columna
+      const slots = ceilDiv(comboQty, perSlot);
+      const length = slots * bl;
+      const usedWidth = N * bw;
+      options.push({
+        width: bw, lengthDim: bl, N, perSlot, levels: 1,
+        description: `${N} columna(s) combinada(s): base + 1 pallet encima por columna`,
+        slots, length, usedWidth,
+        columnWidths: new Array(N).fill(bw), columnLengths: new Array(N).fill(bl),
+      });
+    }
+  }
+  return options;
+}
+
+function bestLength(pallet, quantity, truck) {
+  const options = enumerateOptions(pallet, quantity, truck);
+  if (options.length === 0) return Infinity;
+  return options.reduce((min, opt) => Math.min(min, opt.length), Infinity);
+}
+
+// Comprueba si combinar verticalmente `itemA` e `itemB` (en cualquiera de
+// los dos posibles roles, cuál es la base y cuál va encima) compensa frente
+// a llevarlos por separado — y si es así, devuelve la mejor combinación
+// encontrada junto con lo que sobra de cada uno (si sus cantidades no
+// coinciden, sobra del que tenga más).
+function tryVerticalPair(itemA, itemB, truck) {
+  const roleOptions = [];
+  if (canBeVerticalBase(itemA.pallet.type) && canBeVerticalTopper(itemB.pallet.type)) {
+    roleOptions.push({ base: itemA, topper: itemB });
+  }
+  if (canBeVerticalBase(itemB.pallet.type) && canBeVerticalTopper(itemA.pallet.type)) {
+    roleOptions.push({ base: itemB, topper: itemA });
+  }
+  if (roleOptions.length === 0) return null;
+
+  let best = null;
+  for (const { base, topper } of roleOptions) {
+    const comboQty = Math.min(base.quantity, topper.quantity);
+    if (comboQty < 1) continue;
+
+    const comboOptions = enumerateVerticalComboOptions(base.pallet, topper.pallet, comboQty, truck);
+    if (comboOptions.length === 0) continue;
+    const comboBest = comboOptions.reduce((a, b) => (b.length < a.length - EPS ? b : a));
+
+    const leftoverBaseQty = base.quantity - comboQty;
+    const leftoverTopperQty = topper.quantity - comboQty;
+    const leftoverBaseLen = leftoverBaseQty > 0 ? bestLength(base.pallet, leftoverBaseQty, truck) : 0;
+    const leftoverTopperLen = leftoverTopperQty > 0 ? bestLength(topper.pallet, leftoverTopperQty, truck) : 0;
+    const pairedTotal = comboBest.length + leftoverBaseLen + leftoverTopperLen;
+
+    const separateTotal = bestLength(base.pallet, base.quantity, truck) + bestLength(topper.pallet, topper.quantity, truck);
+
+    if (pairedTotal < separateTotal - EPS) {
+      const savings = separateTotal - pairedTotal;
+      if (!best || savings > best.savings + EPS) {
+        best = { base, topper, comboQty, comboOptions, leftoverBaseQty, leftoverTopperQty, savings };
+      }
+    }
+  }
+  return best;
+}
+
+// Búsqueda voraz de emparejamientos verticales entre artículos de huella
+// distinta (no es una búsqueda exhaustiva de todos los emparejamientos
+// posibles a la vez — eso sería en sí mismo un problema de asignación —
+// pero en cada paso aplica el que más metros ahorra, hasta que ninguno
+// compensa ya). `soloItems` son artículos cuya huella no comparten con
+// ningún otro (los que sí la comparten ya se agrupan aparte, en
+// `packFootprintFamily`).
+function applyVerticalPairing(soloItems, truck) {
+  const pool = soloItems.map((item) => ({ ...item }));
+  const comboPrepared = [];
+  let comboCounter = 0;
+
+  for (;;) {
+    let bestPair = null;
+    let bestI = -1;
+    let bestJ = -1;
+    for (let i = 0; i < pool.length; i++) {
+      if (pool[i].quantity < 1) continue;
+      for (let j = i + 1; j < pool.length; j++) {
+        if (pool[j].quantity < 1) continue;
+        const pair = tryVerticalPair(pool[i], pool[j], truck);
+        if (pair && (!bestPair || pair.savings > bestPair.savings + EPS)) {
+          bestPair = pair;
+          bestI = i;
+          bestJ = j;
+        }
+      }
+    }
+    if (!bestPair) break;
+
+    const { base, topper, comboQty, comboOptions, leftoverBaseQty, leftoverTopperQty } = bestPair;
+    comboOptions.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
+    comboCounter += 1;
+    comboPrepared.push({
+      id: `vpair:${base.id}+${topper.id}:${comboCounter}`,
+      isVerticalCombo: true,
+      base, topper, comboQty,
+      options: comboOptions,
+    });
+
+    const iIsBase = pool[bestI].id === base.id;
+    pool[bestI] = iIsBase ? { ...base, quantity: leftoverBaseQty } : { ...topper, quantity: leftoverTopperQty };
+    pool[bestJ] = iIsBase ? { ...topper, quantity: leftoverTopperQty } : { ...base, quantity: leftoverBaseQty };
+  }
+
+  return { comboPrepared, remaining: pool.filter((item) => item.quantity > 0) };
+}
+
 // Identifica la forma real de una opción (qué anchos de columna usa, no solo
 // `width`, que para una opción mezclada es solo la primera orientación) —
 // necesario para no confundir "2 columnas de 0,80" con "1 de 1,30 + 1 de
@@ -367,6 +530,12 @@ function bestGroupAssignmentTopK(indices, prepared, truck, k) {
 function makePlacement(item, option, binIndex) {
   if (item.isFamily) {
     return { id: item.id, isFamily: true, members: item.members, binIndex, option };
+  }
+  if (item.isVerticalCombo) {
+    return {
+      id: item.id, isVerticalCombo: true, base: item.base, topper: item.topper,
+      quantity: item.comboQty, binIndex, option,
+    };
   }
   return {
     id: item.id, name: item.name, code: item.code, quantity: item.quantity,
@@ -488,11 +657,17 @@ function packArticlesTopK(prepared, truck, maxGroup, k) {
 // mide — dos disposiciones distintas pueden medir exactamente lo mismo (ver
 // `comboSignature`) y no deben confundirse con "la misma solución".
 function placementSignature(item) {
-  const ids = item.isFamily ? item.members.map((m) => m.id) : [item.id];
+  const ids = item.isFamily
+    ? item.members.map((m) => m.id)
+    : item.isVerticalCombo
+      ? [item.base.id, item.topper.id]
+      : [item.id];
   const opt = item.option;
   const shape = item.isFamily
     ? `F,rows${opt.rows},N${opt.N},${opt.width.toFixed(4)}x${opt.lengthDim.toFixed(4)}`
-    : `N${opt.N},slots${opt.slots},${optionShapeKey(opt)}x${opt.lengthDim.toFixed(4)}`;
+    : item.isVerticalCombo
+      ? `VC,N${opt.N},slots${opt.slots},${optionShapeKey(opt)}x${opt.lengthDim.toFixed(4)}`
+      : `N${opt.N},slots${opt.slots},${optionShapeKey(opt)}x${opt.lengthDim.toFixed(4)}`;
   return `${ids.slice().sort((a, b) => a - b).join(',')}:${shape}`;
 }
 
@@ -604,6 +779,7 @@ function packArticles(items, truck) {
   }
 
   const prepared = [];
+  const soloItems = [];
   for (const group of familiesByKey.values()) {
     if (group.length >= 2) {
       const familyResult = packFootprintFamily(group, truck);
@@ -614,11 +790,20 @@ function packArticles(items, truck) {
         options: [familyResult],
       });
     } else {
-      const item = group[0];
-      const options = enumerateOptions(item.pallet, item.quantity, truck);
-      options.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
-      prepared.push({ ...item, options });
+      soloItems.push(group[0]);
     }
+  }
+
+  // Artículos con huellas DISTINTAS (por eso no se agruparon arriba) aún
+  // pueden ir uno encima de otro si uno cabe dentro de la huella del otro y
+  // las alturas suman menos que el camión (ver `applyVerticalPairing`).
+  const { comboPrepared, remaining } = applyVerticalPairing(soloItems, truck);
+  prepared.push(...comboPrepared);
+
+  for (const item of remaining) {
+    const options = enumerateOptions(item.pallet, item.quantity, truck);
+    options.sort((a, b) => a.length - b.length || a.usedWidth - b.usedWidth);
+    prepared.push({ ...item, options });
   }
 
   if (prepared.length === 0) return { bins: [], placements: [], totalLength: 0, alternative: null };

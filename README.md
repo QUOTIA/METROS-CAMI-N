@@ -39,11 +39,15 @@ El panel "Camión" de la izquierda no se elige a mano: la app decide sola qué
 camión usar para el pedido actual, entre el estándar (2,45 x 2,70 m, sin
 límite de largo en esta app) y el furgo de Iulian (2,10 x 2,00 m, con un
 límite real de 4,20 m de largo). Prueba primero el furgo — recalculando todo
-el pedido con su ancho y alto — y solo lo elige si cabe en su largo máximo;
-si no cabe (o si algún pallet ni siquiera entra por ancho o alto en el
-furgo), usa el estándar. El panel muestra qué camión se ha asignado, sus
-medidas, y un aviso explicando por qué se descartó el furgo cuando no es el
-elegido.
+el pedido con su ancho y alto — y solo lo elige si cabe en su largo máximo
+**y además no necesita más metros que el estándar**: al ser más bajo, el
+furgo puede perder un nivel de apilado (D) o un apilado vertical entre
+artículos distintos que sí cabría con el alto del estándar, y en ese caso no
+compensa usarlo aunque quepa — minimizar los metros del pedido pesa más que
+usar el camión pequeño. Si no cabe, si necesitaría más metros, o si algún
+pallet ni siquiera entra por ancho o alto en el furgo, se usa el estándar.
+El panel muestra qué camión se ha asignado, sus medidas, y un aviso
+explicando por qué se descartó el furgo cuando no es el elegido.
 
 Cuando existe una segunda disposición distinta de la mejor —igual o más
 metros que la mejor opción—, se muestra al lado (a la derecha, a la misma
@@ -169,10 +173,11 @@ trata como un único bloque en dos etapas:
    mientras la suma de sus alturas quepa en el camión. El reparto usa un
    algoritmo de empaquetado por alturas (First-Fit-Decreasing): ordena los
    pallets de mayor a menor altura y va llenando columnas.
-3. **Los pallets U nunca se combinan con nada.** Un pallet de tipo único (U)
-   no se apila ni debajo ni encima de ningún otro, aunque la altura sobrante
-   lo permitiría — cada uno ocupa su propia columna en solitario, igual que
-   si fuera el único artículo de esa base.
+3. **Los pallets U nunca se combinan con otro de la MISMA base.** Dentro de
+   este bloque (artículos con idéntico ancho x largo), un pallet único (U) no
+   se apila ni debajo ni encima de ningún otro, aunque la altura sobrante lo
+   permitiría — cada uno ocupa su propia columna en solitario. (Un U sí puede
+   servir de base a un artículo de base DISTINTA — ver la siguiente sección.)
 
 Se calcula así el menor número de filas posible para colocar todos los
 pallets de las referencias combinadas, respetando esa regla. En el diagrama,
@@ -185,6 +190,44 @@ Esto no es una búsqueda exhaustiva de todas las formas de repartir alturas
 (sería un problema de empaquetado en contenedores, NP-difícil en general),
 pero cubre bien el caso típico de referencias con bases idénticas y alturas
 parecidas.
+
+## Apilado vertical entre artículos de base DISTINTA
+
+La sección anterior cubre artículos que comparten EXACTAMENTE la misma base.
+Pero dos artículos con bases distintas también pueden ir uno encima del
+otro — por ejemplo, un pallet ancho y alto que deja hueco de altura de sobra
+puede servir de base a un pallet más pequeño, en vez de dejar ese hueco
+vacío y llevarlos en tramos separados.
+
+Reglas de quién puede ser base y quién puede ir encima:
+
+- **U puede ser base**, pero nunca puede ir encima de otro artículo ni
+  doblarse consigo mismo — coherente con que "no se puede remontar" se
+  refiera a remontar el propio U, no a que el hueco de altura que le sobra
+  deba quedar vacío.
+- **D puede ser base o ir encima.**
+- **P mantiene su propio modelo** (base + fila piramidal encima, con nidos
+  entre las propias columnas de su base) y no entra en este apilado cruzado
+  con otro artículo — su geometría no es una pila simple de dos cajas.
+
+Para que la combinación sea válida, el artículo de encima debe caber dentro
+de la huella del de abajo (en alguna orientación) y la suma de sus alturas
+no puede superar el alto útil del camión. La búsqueda es voraz: en cada paso
+prueba todas las parejas posibles entre artículos de base distinta y aplica
+la que más metros ahorre frente a llevarlos por separado, repitiendo hasta
+que ninguna combinación compense ya — no es una búsqueda exhaustiva de todos
+los emparejamientos posibles a la vez (eso sería en sí mismo un problema de
+asignación), pero cubre bien el caso típico de "una base con hueco de altura
+de sobra para un artículo más pequeño encima". Si sobran unidades de
+cualquiera de los dos (porque sus cantidades no coinciden), esas unidades
+sueltas se calculan aparte, igual que cualquier otro artículo.
+
+Ejemplo real: un camión de 2,40 x 2,50 m con 3 pallets U de 1,00 x 0,80 x
+1,50 m y 3 pallets D de 0,80 x 0,60 x 1,00 m. Por separado necesitarían 1,00
+m (el U) + 0,60 m (el D) = 1,60 m. Combinados — el D encima del U, ya que
+1,50 + 1,00 = 2,50 m cabe justo — solo hace falta 1,00 m: un ahorro real de
+0,60 m que la versión anterior de la app, al no considerar bases distintas
+para el apilado vertical, no encontraba.
 
 ## Transportistas (en preparación)
 

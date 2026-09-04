@@ -323,4 +323,57 @@ function approx(a, b, msg) {
   approx(toMeters('1.72'), 1.72, 'toMeters dot meters');
 }
 
+// --- Apilado vertical entre artículos de huella DISTINTA ---
+// Camión de 2,40 x 2,50 m. U ancho (1,00x0,80, alto 1,50) + D pequeño
+// (0,80x0,60, alto 1,00): 1,50 + 1,00 = 2,50 m, cabe justo. Por separado
+// necesitarían 1,00 m (el U) + 0,60 m (el D) = 1,60 m; combinados, uno
+// encima del otro, solo hace falta 1,00 m — el ahorro es real, no un empate.
+{
+  const truck = { width: 2.40, height: 2.50 };
+  const items = [
+    { id: 1, name: 'U-base', code: '100x080x150xU', quantity: 3 },
+    { id: 2, name: 'D-encima', code: '080x060x100xD', quantity: 3 },
+  ];
+  const result = packArticles(items, truck);
+  approx(result.totalLength, 1.0, 'U ancho + D pequeño encima: 3 columnas combinadas de 1,00 m');
+  assert.strictEqual(result.bins.length, 1, 'ambos artículos deben ir en el mismo tramo, apilados');
+  assert.ok(result.bins[0].items[0].isVerticalCombo, 'la disposición elegida debe ser un apilado vertical entre ambos');
+  const combo = result.bins[0].items[0];
+  assert.strictEqual(combo.base.id, 1, 'el U (más ancho y con más altura sobrante) debe ser la base');
+  assert.strictEqual(combo.topper.id, 2, 'el D pequeño debe quedar encima');
+}
+
+// --- Dos U nunca se apilan verticalmente entre sí, aunque la altura       ---
+// --- sobrante lo permitiera físicamente (U nunca puede ir "encima").      ---
+{
+  const truck = { width: 2.40, height: 3.10 }; // alto de sobra para 1,50+1,50
+  const items = [
+    { id: 1, name: 'U1', code: '100x080x150xU', quantity: 2 },
+    { id: 2, name: 'U2', code: '090x070x150xU', quantity: 2 },
+  ];
+  const result = packArticles(items, truck);
+  const anyVerticalCombo = result.bins.some((b) => b.items.some((i) => i.isVerticalCombo));
+  assert.ok(!anyVerticalCombo, 'dos artículos U nunca deben combinarse en vertical entre sí');
+}
+
+// --- Si emparejar en vertical no ahorra metros (p. ej. las huellas no      ---
+// --- encajan una dentro de la otra), no debe forzarse la combinación.     ---
+{
+  const truck = { width: 2.45, height: 2.70 };
+  const items = [
+    { id: 1, name: 'U-normal', code: '100x120x150xU', quantity: 4 },
+    { id: 2, name: 'D-independiente', code: '090x110x100xD', quantity: 4 },
+  ];
+  const result = packArticles(items, truck);
+  const anyVerticalCombo = result.bins.some((b) => b.items.some((i) => i.isVerticalCombo));
+  // El D (0,90x1,10) no cabe dentro de la huella del U (1,00x1,20) en
+  // ninguna orientación relativa... en realidad sí podría caber; lo
+  // relevante del test es que si NO compensa (mide igual o más que por
+  // separado) la app no lo fuerza. Comprobamos que el resultado nunca sea
+  // peor que llevarlos por separado, se combinen o no.
+  const separate = computeLineResult(items[0].code, items[0].quantity, truck).best.length
+    + computeLineResult(items[1].code, items[1].quantity, truck).best.length;
+  assert.ok(result.totalLength <= separate + 1e-6, 'combinar (si se hace) nunca debe empeorar el resultado');
+}
+
 console.log('Todos los tests pasaron correctamente.');

@@ -477,19 +477,39 @@ function decideTruck(candidateItems) {
   if (candidateItems.length === 0) {
     return { preset: standard, furgoLength: null, furgoError: null };
   }
+
   const furgoAttempt = tryPackWithPreset(candidateItems, furgo);
-  if (furgoAttempt.result && furgoAttempt.result.totalLength <= furgo.maxLength + 0.005) {
-    return { preset: furgo, furgoLength: furgoAttempt.result.totalLength, furgoError: null };
+  const furgoFits = furgoAttempt.result && furgoAttempt.result.totalLength <= furgo.maxLength + 0.005;
+  if (!furgoFits) {
+    return {
+      preset: standard,
+      furgoLength: furgoAttempt.result ? furgoAttempt.result.totalLength : null,
+      furgoError: furgoAttempt.error,
+    };
   }
-  return {
-    preset: standard,
-    furgoLength: furgoAttempt.result ? furgoAttempt.result.totalLength : null,
-    furgoError: furgoAttempt.error,
-  };
+
+  // El furgo cabe en su propio largo máximo, pero solo compensa usarlo si
+  // no necesita MÁS metros que el estándar — al ser más bajo (2,00 m frente
+  // a 2,70 m) puede perder un nivel de apilado, o un apilado vertical entre
+  // artículos distintos, y acabar necesitando más metros que el camión
+  // grande. En ese caso no tiene sentido preferirlo solo por ser más
+  // pequeño: minimizar los metros del pedido va antes que el tamaño del
+  // camión.
+  const standardAttempt = tryPackWithPreset(candidateItems, standard);
+  if (standardAttempt.result && standardAttempt.result.totalLength < furgoAttempt.result.totalLength - 0.005) {
+    return {
+      preset: standard,
+      furgoLength: furgoAttempt.result.totalLength,
+      furgoError: null,
+      furgoNeedsMore: true,
+    };
+  }
+
+  return { preset: furgo, furgoLength: furgoAttempt.result.totalLength, furgoError: null };
 }
 
 function updateTruckDecisionDisplay(decision, totalLength) {
-  const { preset, furgoLength, furgoError } = decision;
+  const { preset, furgoLength, furgoError, furgoNeedsMore } = decision;
 
   document.getElementById('truckDecisionName').textContent = preset.label;
   document.getElementById('truckDecisionDims').textContent =
@@ -500,6 +520,10 @@ function updateTruckDecisionDisplay(decision, totalLength) {
     hint.hidden = false;
     hint.classList.remove('warning');
     hint.textContent = `Cabe en el furgo de Iulian: usa ${fmt(totalLength)} m de los ${fmt(preset.maxLength)} m que tiene, quedan ${fmt(preset.maxLength - totalLength)} m libres.`;
+  } else if (furgoNeedsMore) {
+    hint.hidden = false;
+    hint.classList.add('warning');
+    hint.textContent = `El furgo de Iulian cabría (usaría ${fmt(furgoLength)} m de los 4,20 m que tiene), pero al ser más bajo necesitaría más metros que el estándar (${fmt(totalLength)} m aquí) — se usa el estándar porque importa más ahorrar metros que usar el camión pequeño.`;
   } else if (furgoLength !== null) {
     hint.hidden = false;
     hint.classList.add('warning');
@@ -607,13 +631,17 @@ function renderResults() {
   const packResult = validItems.length > 0 ? window.PalletCalc.packArticles(validItems, truck) : null;
 
   // Cada artículo original se busca por su propio id, aunque forme parte de
-  // un bloque combinado por huella compartida (`isFamily`).
+  // un bloque combinado por huella compartida (`isFamily`) o de un apilado
+  // vertical con otro artículo de huella distinta (`isVerticalCombo`).
   const entryById = new Map();
   (packResult ? packResult.placements : []).forEach((placement) => {
     if (placement.isFamily) {
-      placement.members.forEach((member) => entryById.set(member.id, { placement, isFamily: true }));
+      placement.members.forEach((member) => entryById.set(member.id, { placement, kind: 'family' }));
+    } else if (placement.isVerticalCombo) {
+      entryById.set(placement.base.id, { placement, kind: 'verticalCombo', role: 'base' });
+      entryById.set(placement.topper.id, { placement, kind: 'verticalCombo', role: 'topper' });
     } else {
-      entryById.set(placement.id, { placement, isFamily: false });
+      entryById.set(placement.id, { placement, kind: 'solo' });
     }
   });
 
@@ -622,17 +650,23 @@ function renderResults() {
     const entry = entryById.get(item.id);
     if (!cell || !entry) return;
 
-    const { placement, isFamily } = entry;
+    const { placement, kind, role } = entry;
     const opt = placement.option;
     cell.className = 'result-cell';
 
-    if (isFamily) {
+    if (kind === 'family') {
       const otherNames = placement.members
         .filter((m) => m.id !== item.id)
         .map((m) => m.name || m.code)
         .join(', ');
       cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (bloque combinado, ${opt.N} a lo ancho, ${opt.rows} fila(s) de ${fmt(opt.lengthDim)} m)</span>
         <div class="shared-hint">misma base que ${otherNames}: se apilan mezclados en la misma columna</div>`;
+    } else if (kind === 'verticalCombo') {
+      const other = role === 'base' ? placement.topper : placement.base;
+      const otherName = other.name || other.code;
+      const roleText = role === 'base' ? `sirve de base a ${otherName}` : `va apilado encima de ${otherName}`;
+      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (apilado vertical, ${opt.N} columna(s), ${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m)</span>
+        <div class="shared-hint">${roleText}: aprovecha la altura sobrante en vez de ir en tramos separados</div>`;
     } else {
       const shared = packResult.bins[placement.binIndex].items.length > 1;
       cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (${opt.N} a lo ancho, ${opt.description}, ${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m)</span>${

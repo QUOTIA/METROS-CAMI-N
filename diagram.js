@@ -280,6 +280,57 @@ function drawPlacement(svg, placement, yStart, binLength, xOffset, color) {
   svg.appendChild(group);
 }
 
+// Dibuja un apilado vertical entre dos artículos de huella DISTINTA (uno de
+// base, otro encima — ver calc.js `applyVerticalPairing`): cada columna
+// llena se dibuja como una celda con dos bandas (base abajo, encima arriba),
+// reutilizando el mismo lenguaje visual que las columnas mezcladas de
+// `drawFamilyPlacement`, para dejar claro que son dos referencias distintas
+// compartiendo la misma columna en vertical.
+function drawVerticalComboPlacement(svg, placement, yStart, binLength, xOffset, colorById) {
+  const group = el('g', {});
+  const opt = placement.option;
+  const stackItems = [
+    { id: placement.base.id, height: placement.base.pallet.height },
+    { id: placement.topper.id, height: placement.topper.pallet.height },
+  ];
+  let remaining = placement.quantity;
+
+  for (let s = 0; s < opt.slots; s++) {
+    const slotY = yStart + s * opt.lengthDim;
+    const itemsInSlot = Math.min(opt.perSlot, remaining);
+    remaining -= itemsInSlot;
+
+    let x = xOffset;
+    for (let c = 0; c < opt.N; c++) {
+      const colWidth = opt.columnWidths[c];
+      const colLength = opt.columnLengths[c];
+      if (c < itemsInSlot) {
+        drawStackCell(group, x, slotY, colWidth, colLength, stackItems, colorById);
+      } else {
+        group.appendChild(el('rect', {
+          x, y: slotY, width: colWidth, height: colLength, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+        }));
+      }
+      x += colWidth;
+    }
+
+    if (s > 0) {
+      group.appendChild(el('line', {
+        x1: xOffset, x2: xOffset + opt.usedWidth, y1: slotY, y2: slotY, class: 'slot-divider',
+      }));
+    }
+  }
+
+  if (opt.length < binLength - DIAG_EPS) {
+    group.appendChild(el('rect', {
+      x: xOffset, y: yStart + opt.length, width: opt.usedWidth, height: binLength - opt.length,
+      class: 'unused-width',
+    }));
+  }
+
+  svg.appendChild(group);
+}
+
 // packResult: { bins, placements, totalLength } — ver calc.js `packArticles`.
 // truck: { width, height }.
 // orderedIds: ids de los artículos en el orden en que aparecen en la tabla,
@@ -314,6 +365,8 @@ function renderTruckDiagram(container, packResult, truck, orderedIds) {
     bin.items.forEach((placement) => {
       if (placement.isFamily) {
         drawFamilyPlacement(svg, placement, yCursor, bin.length, xCursor, colorById);
+      } else if (placement.isVerticalCombo) {
+        drawVerticalComboPlacement(svg, placement, yCursor, bin.length, xCursor, colorById);
       } else {
         const color = colorById.get(placement.id) || DIAGRAM_PALETTE[0];
         drawPlacement(svg, placement, yCursor, bin.length, xCursor, color);
@@ -341,6 +394,9 @@ function renderTruckDiagram(container, packResult, truck, orderedIds) {
   packResult.placements.forEach((placement) => {
     if (placement.isFamily) {
       placement.members.forEach((member) => entryById.set(member.id, { member, option: placement.option }));
+    } else if (placement.isVerticalCombo) {
+      entryById.set(placement.base.id, { member: placement.base, option: placement.option });
+      entryById.set(placement.topper.id, { member: placement.topper, option: placement.option });
     } else {
       entryById.set(placement.id, { member: placement, option: placement.option });
     }
