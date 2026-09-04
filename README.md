@@ -245,6 +245,39 @@ m (el U) + 0,60 m (el D) = 1,60 m. Combinados — el D encima del U, ya que
 0,60 m que la versión anterior de la app, al no considerar bases distintas
 para el apilado vertical, no encontraba.
 
+## Vista 3D de la disposición
+
+Además de la vista en planta (2D), el panel "Disposición en el camión" tiene
+un interruptor 2D/3D. La vista 3D dibuja cada pallet como una caja real con
+Three.js (cargado por CDN), en un sistema de coordenadas X = ancho del
+camión, Y = alto (suelo en 0, apilando hacia arriba con la altura REAL de
+cada pallet, no una escala arbitraria) y Z = largo (0 = cabecera, hacia las
+puertas) — el mismo sentido que el eje vertical del SVG en planta, así que
+la disposición en X/Z coincide exactamente entre las dos vistas. Se puede
+rotar arrastrando con el ratón y hacer zoom con la rueda (controles propios,
+sin depender de `OrbitControls.js`).
+
+Cada referencia:
+
+- lleva su propio color (la misma paleta y el mismo orden que la leyenda de
+  la vista 2D), y
+- va numerada 1, 2, 3… según el orden en que aparece en la tabla de
+  artículos (1 = la primera fila).
+
+Cada pila física (una columna, o un tramo de columna con varios niveles
+apilados) lleva una etiqueta con su número de referencia, su ancho x largo,
+y su alto — así se ve de un vistazo qué pallets van remontados y cuántos
+niveles lleva cada pila, algo que en la vista 2D solo se insinuaba con la
+opacidad del relleno.
+
+La geometría (`diagram3d.js`, función `buildPalletBoxes`) recorre el mismo
+`packResult` de `calc.js` que la vista 2D (`diagram.js`), traduciendo cada
+tipo de colocación (rejilla U/D, pirámide P, columnas independientes de
+`isSplitMixed`, bloque combinado por huella compartida y apilado vertical
+entre huellas distintas) a cajas 3D con la altura real de cada pallet — no
+depende del DOM ni de Three.js, así que se puede probar con Node igual que
+`distributeColumns` (`diagram3d.test.js`).
+
 ## Transportistas (en preparación)
 
 La ruedita ⚙ junto al título abre un panel de ajustes, oculto del flujo
@@ -267,6 +300,8 @@ transportistas dados de alta, no solo al estándar y al furgo.
 - `calc.test.js` — pruebas de la lógica (`node calc.test.js`).
 - `diagram.js` — dibuja el esquema en planta (SVG) de la disposición en el camión.
 - `diagram.test.js` — pruebas del reparto de pallets por columnas (`node diagram.test.js`).
+- `diagram3d.js` — traduce el resultado del cálculo a cajas 3D y monta la vista 3D interactiva (Three.js).
+- `diagram3d.test.js` — pruebas de la geometría 3D, sin DOM ni Three.js (`node diagram3d.test.js`).
 
 ## Supuestos de negocio (a confirmar si cambian las reglas reales)
 

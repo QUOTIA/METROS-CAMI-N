@@ -192,6 +192,16 @@
   .diagram-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); }
   .legend-item i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+
+  .view-toggle { display: inline-flex; gap: 4px; margin-left: 12px; vertical-align: middle; }
+  .view-toggle button {
+    font-size: 0.75rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: #fff; color: var(--muted); cursor: pointer;
+  }
+  .view-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .diagram3d-wrap { max-width: 420px; margin: 0 auto; border-radius: 4px; overflow: hidden; }
+  .diagram3d-wrap canvas { display: block; width: 100%; height: auto; }
+  .diagram3d-hint { color: var(--muted); font-size: 0.72rem; text-align: center; margin: 6px 0 0; }
 </style>
 </head>
 <body>
@@ -268,8 +278,13 @@
 
 <div class="diagrams-row">
   <div class="panel diagram-panel">
-    <h2>Disposición en el camión</h2>
-    <p class="diagram-hint">Vista en planta, camión de arriba (cabecera) a abajo (puertas). Cada color es un artículo/referencia; cada pallet lleva su ancho (borde superior) y su largo (borde lateral) en metros; los recuadros discontinuos son hueco sin usar.</p>
+    <h2>Disposición en el camión
+      <span class="view-toggle" id="viewToggle">
+        <button type="button" data-view="2d" class="active">2D</button>
+        <button type="button" data-view="3d">3D</button>
+      </span>
+    </h2>
+    <p class="diagram-hint" id="diagramHint">Vista en planta, camión de arriba (cabecera) a abajo (puertas). Cada color es un artículo/referencia; cada pallet lleva su ancho (borde superior) y su largo (borde lateral) en metros; los recuadros discontinuos son hueco sin usar.</p>
     <div class="diagram-scroll" id="diagramHost"></div>
   </div>
 
@@ -284,8 +299,10 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/128/three.min.js"></script>
 <script src="calc.js"></script>
 <script src="diagram.js"></script>
+<script src="diagram3d.js"></script>
 <script>
 let rowCounter = 0;
 const articles = []; // { id, name, width, length, height, type, quantity }
@@ -690,7 +707,9 @@ function renderResults() {
   updateTruckDecisionDisplay(decision, totalLength);
 
   const orderedIds = validItems.map((item) => item.id);
-  window.renderTruckDiagram(document.getElementById('diagramHost'), packResult, truck, orderedIds);
+  lastPackResult = packResult;
+  lastTruck = truck;
+  lastOrderedIds = orderedIds;
 
   const altPanel = document.getElementById('altPanel');
   if (packResult && packResult.alternative) {
@@ -701,11 +720,45 @@ function renderResults() {
       ? 'Segunda opción de colocación (mismos metros)'
       : 'Segunda opción de colocación (más metros de camión)';
     document.getElementById('altTotalValue').textContent = `${fmt(alt.totalLength)} m`;
-    window.renderTruckDiagram(document.getElementById('diagramHostAlt'), alt, truck, orderedIds);
+    lastAlt = alt;
   } else {
     altPanel.hidden = true;
+    lastAlt = null;
+  }
+
+  renderDiagrams();
+}
+
+// --- Vista 2D / 3D de la disposición ---------------------------------------
+// Se guarda el último resultado calculado para poder redibujar los mismos
+// datos al cambiar de vista, sin tener que recalcular el pedido entero.
+let diagramViewMode = '2d';
+let lastPackResult = null;
+let lastTruck = null;
+let lastOrderedIds = [];
+let lastAlt = null;
+
+const DIAGRAM_HINTS = {
+  '2d': 'Vista en planta, camión de arriba (cabecera) a abajo (puertas). Cada color es un artículo/referencia; cada pallet lleva su ancho (borde superior) y su largo (borde lateral) en metros; los recuadros discontinuos son hueco sin usar.',
+  '3d': 'Vista 3D: arrastra para rotar, rueda del ratón para acercar/alejar. Cada referencia tiene su color y su número (1, 2, 3… en el orden de la tabla); cada pallet muestra su ancho, largo y alto.',
+};
+
+function renderDiagrams() {
+  const renderFn = diagramViewMode === '3d' ? window.render3DView : window.renderTruckDiagram;
+  document.getElementById('diagramHint').textContent = DIAGRAM_HINTS[diagramViewMode];
+  renderFn(document.getElementById('diagramHost'), lastPackResult, lastTruck, lastOrderedIds);
+  if (!document.getElementById('altPanel').hidden) {
+    renderFn(document.getElementById('diagramHostAlt'), lastAlt, lastTruck, lastOrderedIds);
   }
 }
+
+document.getElementById('viewToggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-view]');
+  if (!btn || btn.classList.contains('active')) return;
+  diagramViewMode = btn.dataset.view;
+  document.querySelectorAll('#viewToggle button').forEach((b) => b.classList.toggle('active', b === btn));
+  renderDiagrams();
+});
 
 document.getElementById('addRowBtn').addEventListener('click', addRow);
 
