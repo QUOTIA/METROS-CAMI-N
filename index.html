@@ -299,7 +299,15 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.128.0/three.min.js"></script>
+<script>
+  // Si el CDN principal falla (red, bloqueo, ruta caída), se prueba un
+  // segundo CDN antes de rendirse — así la vista 3D no depende de un único
+  // proveedor externo.
+  if (typeof THREE === 'undefined') {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>');
+  }
+</script>
 <script src="calc.js"></script>
 <script src="diagram.js"></script>
 <script src="diagram3d.js"></script>
