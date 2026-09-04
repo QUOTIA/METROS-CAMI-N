@@ -342,8 +342,12 @@ function packHeightsFFD(pool, truckHeight) {
 //
 // Se calcula el menor número de filas necesario para colocar todos los
 // pallets del grupo. articles = [{ id, name, code, quantity, pallet }]
-// (misma huella entre sí).
-function packFootprintFamily(articles, truck) {
+// (misma huella entre sí). Devuelve un candidato por orientación posible
+// (hasta 2, si el pallet no es cuadrado) — cada uno ya resuelto (puro o
+// mixto, lo que dé menos largo para ESA orientación de referencia). Si las
+// dos orientaciones empatan en largo total, ambas quedan disponibles como
+// disposiciones físicamente distintas (ver `packFootprintFamilyTopK`).
+function computeFamilyCandidates(articles, truck) {
   const { dimA, dimB } = articles[0].pallet;
   const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
   const hasSecond = orientations.length === 2;
@@ -358,7 +362,7 @@ function packFootprintFamily(articles, truck) {
     }
   }
 
-  let best = null;
+  const candidates = [];
   for (let oi = 0; oi < orientations.length; oi++) {
     const [width, lengthDim] = orientations[oi];
     const N = floorDiv(truck.width, width);
@@ -431,17 +435,55 @@ function packFootprintFamily(articles, truck) {
     const usedWidth = Math.max(N * width, ...plainRowGroups.map((g) => g.N * g.width));
     const isMixedPlainRows = plainRowGroups.length > 1 || plainRowGroups.some((g) => g.width !== width);
 
-    const candidate = {
+    candidates.push({
       width, lengthDim, N, rows, length, usedWidth, pyramidGroups, columnBins,
       isFamily: true, plainRowGroups, isMixedPlainRows,
-    };
-
-    if (!best || candidate.length < best.length - EPS) {
-      best = candidate;
-    }
+    });
   }
 
-  return best;
+  return candidates;
+}
+
+// Firma de la forma física de un candidato de bloque combinado — qué
+// orientación usa la fila piramidal (si hay) y qué grupos de filas normales
+// (cada uno con su propio ancho de columna), para poder distinguir dos
+// candidatos que midan exactamente lo mismo pero repartan las columnas de
+// forma distinta (p. ej. "todo a 3 columnas de 0,80 m" frente a "todo a 2
+// columnas de 1,20 m").
+function familyShapeKey(opt) {
+  const pyramidPart = opt.pyramidGroups.length > 0
+    ? `P${opt.pyramidGroups.length}x${opt.width.toFixed(6)}x${opt.lengthDim.toFixed(6)}`
+    : 'P0';
+  const plainPart = opt.plainRowGroups.map((g) => `${g.N}x${g.width.toFixed(6)}x${g.rowsCount}`).join('>');
+  return `${pyramidPart}|${plainPart}`;
+}
+
+// La mejor disposición única para este bloque combinado (compatibilidad:
+// usada donde solo hace falta UNA disposición, no varias para comparar).
+function packFootprintFamily(articles, truck) {
+  const candidates = computeFamilyCandidates(articles, truck);
+  return candidates.reduce((best, c) => (!best || c.length < best.length - EPS ? c : best), null);
+}
+
+// Hasta `k` disposiciones DISTINTAS para este bloque combinado, ordenadas de
+// menor a mayor largo — como con un artículo suelto (ver `enumerateOptions`
+// + `packArticlesTopK`), dos orientaciones que empaten en largo total deben
+// quedar ambas disponibles como "segunda opción de colocación", no solo la
+// primera que se calculó. Ejemplo real: 18 pallets U de 0,80x1,20 m —
+// "3 en 3" (3 columnas de 0,80 m, 6 filas de 1,20 m) y "2 en 2" (2 columnas
+// de 1,20 m, 9 filas de 0,80 m) miden los dos exactamente 7,20 m.
+function packFootprintFamilyTopK(articles, truck, k) {
+  const candidates = computeFamilyCandidates(articles, truck).slice().sort((a, b) => a.length - b.length);
+  const seen = new Set();
+  const top = [];
+  for (const c of candidates) {
+    const key = familyShapeKey(c);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    top.push(c);
+    if (top.length >= k) break;
+  }
+  return top;
 }
 
 // --- Apilado vertical entre artículos de huella DISTINTA -------------------
@@ -926,12 +968,12 @@ function packArticles(items, truck) {
   const soloItems = [];
   for (const group of familiesByKey.values()) {
     if (group.length >= 2) {
-      const familyResult = packFootprintFamily(group, truck);
+      const familyOptions = packFootprintFamilyTopK(group, truck, 2);
       prepared.push({
         id: `family:${group.map((g) => g.id).join(',')}`,
         isFamily: true,
         members: group,
-        options: [familyResult],
+        options: familyOptions,
       });
     } else {
       soloItems.push(group[0]);
@@ -980,6 +1022,7 @@ const api = {
   computeLineResult,
   footprintKey,
   packFootprintFamily,
+  packFootprintFamilyTopK,
   packArticles,
   computeOrderResult,
 };

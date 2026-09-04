@@ -186,7 +186,13 @@ de otro:
    (p. ej. 3 columnas de un largo o 2 columnas de otro largo, dando el mismo
    total), o si dos particiones distintas del pedido dan el mismo total o
    uno mayor, esa segunda disposición queda disponible para mostrarla como
-   "segunda opción de colocación".
+   "segunda opción de colocación". Esto también aplica a un bloque combinado
+   por huella compartida (`packFootprintFamilyTopK`, ver más abajo): si sus
+   dos orientaciones posibles empatan en largo total, las dos se calculan y
+   quedan disponibles como primera y segunda opción, no solo la primera que
+   se encontró. Ejemplo real: 18 pallets U de 0,80 x 1,20 m — "3 en 3" (3
+   columnas de 0,80 m, 6 filas de 1,20 m) y "2 en 2" (2 columnas de 1,20 m,
+   9 filas de 0,80 m) miden los dos exactamente 7,20 m.
 
 Por ejemplo, dos artículos que "en solitario" ocupan cada uno 2 columnas y no
 caben juntos (sus anchos naturales suman más de 2,45 m) sí pueden caber

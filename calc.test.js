@@ -441,4 +441,29 @@ function approx(a, b, msg) {
   assert.strictEqual(totalPlainColumns, 11, 'las 11 columnas (5 D apiladas + 6 U sueltos) deben repartirse entre los dos grupos');
 }
 
+// --- Caso real reportado: un bloque combinado con DOS orientaciones que
+// empatan en largo total debe mostrar las DOS como "primera" y "segunda
+// opción de colocación", igual que ya pasaba con un artículo suelto — antes
+// solo se calculaba y mostraba una. 18 pallets U de 0,80x1,20 m (dos
+// referencias de la misma base, alturas 1,74 y 1,75 m): "3 en 3" (3 columnas
+// de 0,80 m, 6 filas de 1,20 m) y "2 en 2" (2 columnas de 1,20 m, 9 filas de
+// 0,80 m) miden los dos exactamente 18/3×1,20 = 18/2×0,80 = 7,20 m. ---
+{
+  const truck = { width: 2.45, height: 2.70 };
+  const items = [
+    { id: 1, name: 'A', code: '080x120x174xU', quantity: 16 },
+    { id: 2, name: 'B', code: '080x120x175xU', quantity: 2 },
+  ];
+  const result = packArticles(items, truck);
+  approx(result.totalLength, 7.2, 'empate entre las dos orientaciones: 6 filas de 1,20 m = 9 filas de 0,80 m');
+  assert.ok(result.alternative, 'debe existir una segunda disposición del mismo bloque combinado');
+  approx(result.alternative.totalLength, 7.2, 'la alternativa empata exactamente en metros');
+
+  const primaryOpt = result.bins[0].items[0].option;
+  const altOpt = result.alternative.bins[0].items[0].option;
+  assert.notStrictEqual(primaryOpt.N, altOpt.N, 'la alternativa debe usar un número de columnas distinto (disposición física distinta)');
+  const ns = [primaryOpt.N, altOpt.N].sort();
+  assert.deepStrictEqual(ns, [2, 3], 'las dos disposiciones deben ser "2 en 2" y "3 en 3"');
+}
+
 console.log('Todos los tests pasaron correctamente.');
