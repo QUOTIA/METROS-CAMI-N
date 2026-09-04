@@ -105,17 +105,33 @@ Para cada medida + cantidad del pedido:
    mejor los "huecos" de la última fila incompleta).
 
 Para U y D, además de probar cada orientación por separado, también se
-prueba MEZCLAR las dos orientaciones en la misma fila — por ejemplo, un
-pallet con el lado largo a lo ancho y otro (del mismo artículo) con el lado
-corto, si entre los dos aprovechan el ancho del camión mejor que usando una
-sola orientación para todos (p. ej. 1,30 + 0,80 = 2,10 m encaja exacto donde
-2×0,80 = 1,60 m deja medio metro suelto sin poder meter una tercera columna
-igual). Mezclar nunca reduce el largo por debajo de la mejor orientación
-pura, pero sí puede ofrecer una disposición distinta que empata en metros —
-así, cuando existe, aparece como la "segunda opción de colocación" en vez de
-perderse frente a una alternativa peor. (Los pallets de tipo P no mezclan
-orientación: la base de la pirámide necesita columnas del mismo ancho para
-que la fila de arriba encaje.)
+prueba MEZCLAR las dos orientaciones en el mismo tramo de ancho — por
+ejemplo, un pallet con el lado largo a lo ancho y otro (del mismo artículo)
+con el lado corto, si entre los dos aprovechan el ancho del camión mejor que
+usando una sola orientación para todos (p. ej. 1,30 + 0,80 = 2,10 m encaja
+exacto donde 2×0,80 = 1,60 m deja medio metro suelto sin poder meter una
+tercera columna igual).
+
+Al mezclar, las columnas de cada orientación NO se tratan como si fueran
+intercambiables entre sí — cada una ocupa un largo por unidad distinto, así
+que cada grupo de columnas se apila de forma **independiente**, empezando
+las dos a la vez desde el principio del tramo, y el largo total es el
+**máximo** de los dos grupos (no una fila compartida de largo uniforme, que
+desperdiciaría la columna más corta). La cantidad se reparte entre los dos
+grupos buscando el reparto que minimice ese máximo — y encontrarlo bien
+importa: no cualquier reparto da el mejor resultado.
+
+Ejemplo real: 9 pallets de 0,86 x 1,30 m (tipo U) en un camión de 2,45 m de
+ancho. Solo caben 2 columnas de 0,86 m (3 columnas serían 2,58 m, no caben),
+dando 5 filas de 1,30 m = 6,50 m. Pero 1 columna de 0,86 m + 1 de 1,30 m sí
+caben juntas (2,16 m ≤ 2,45 m); repartiendo 3 pallets en la de 0,86 m (3
+filas de 1,30 m = 3,90 m) y 6 en la de 1,30 m (6 filas de 0,86 m = 5,16 m),
+cada una funcionando en paralelo, el resultado es 5,16 m — el máximo de las
+dos — muy por debajo de los 6,50 m de la orientación pura. El diagrama
+dibuja cada columna con su propio número de filas; la más corta muestra el
+hueco sin usar hasta llegar al largo de la más profunda. (Los pallets de
+tipo P no mezclan orientación: la base de la pirámide necesita columnas del
+mismo ancho para que la fila de arriba encaje.)
 
 ## Cómo se combinan varios artículos en el mismo tramo
 

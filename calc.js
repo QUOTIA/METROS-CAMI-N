@@ -112,11 +112,22 @@ function enumeratePyramidOptions(pallet, quantity, truck) {
 // Enumera opciones para U y D: cada columna aporta lo mismo sea cual sea su
 // orientación (el número de niveles depende solo de la altura del pallet,
 // no de qué lado quede a lo ancho), así que además de cada orientación por
-// separado se prueban las DOS MEZCLADAS en la misma fila — por ejemplo, un
-// pallet con el lado largo a lo ancho y otro con el corto, si entre los dos
-// aprovechan el ancho del camión mejor que usando una sola orientación para
-// todos (p. ej. 1,30 + 0,80 = 2,10 encaja donde 2×0,80 = 1,60 desperdicia
-// medio metro de ancho sin poder meter una tercera columna de 0,80).
+// separado se prueban las DOS MEZCLADAS en el mismo tramo de ancho — por
+// ejemplo, un pallet con el lado largo a lo ancho y otro con el corto, si
+// entre los dos aprovechan el ancho del camión mejor que usando una sola
+// orientación para todos (p. ej. 1,30 + 0,80 = 2,10 encaja donde
+// 2×0,80 = 1,60 desperdicia medio metro de ancho sin poder meter una
+// tercera columna de 0,80).
+//
+// Importante: cuando se mezclan las dos orientaciones, las columnas de cada
+// una NO son intercambiables entre sí (cada una ocupa un largo por unidad
+// distinto), así que cada grupo de columnas puede necesitar un número de
+// filas distinto — no tiene sentido obligarlas a compartir una única fila
+// de largo uniforme (eso desperdiciaría la columna más corta). En vez de
+// eso, cada grupo de columnas se apila de forma independiente empezando
+// desde el principio del tramo, y el largo total es el MÁXIMO de los dos
+// grupos — la cantidad se reparte entre ambos grupos buscando el reparto
+// que minimice ese máximo.
 function enumerateRectOptions(pallet, quantity, truck) {
   const { dimA, dimB, type, height } = pallet;
   const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
@@ -135,27 +146,53 @@ function enumerateRectOptions(pallet, quantity, truck) {
     for (let nB = 0; nB <= maxB; nB++) {
       const N = nA + nB;
       if (N < 1) continue;
-
-      const perSlot = N * levels;
-      const lengthDim = Math.max(nA > 0 ? lengthA : 0, nB > 0 ? lengthB : 0);
-      const slots = ceilDiv(quantity, perSlot);
-      const length = slots * lengthDim;
       const usedWidth = usedByA + nB * widthB;
-      const columnWidths = [...new Array(nA).fill(widthA), ...new Array(nB).fill(widthB)];
-      // El largo de la FILA es el máximo de las dos orientaciones (hace
-      // falta ese hueco para que quepa la más profunda), pero cada columna
-      // por sí sola solo ocupa SU propio largo — el resto de esa columna,
-      // dentro de la fila, queda sin usar y así debe marcarse en el dibujo.
-      const columnLengths = [...new Array(nA).fill(lengthA), ...new Array(nB).fill(lengthB)];
-      const description = nB > 0
-        ? `${nA}+${nB} pallet(s) combinados (${nA}×${widthA.toFixed(2)} m + ${nB}×${widthB.toFixed(2)} m de ancho) x ${levels} nivel(es) (${stackWord})`
-        : type === 'U'
+
+      if (nA === 0 || nB === 0) {
+        // Una sola orientación: todas las columnas son intercambiables, así
+        // que repartir la cantidad fila a fila entre todas ya es óptimo.
+        const width = nA > 0 ? widthA : widthB;
+        const lengthDim = nA > 0 ? lengthA : lengthB;
+        const perSlot = N * levels;
+        const slots = ceilDiv(quantity, perSlot);
+        const length = slots * lengthDim;
+        const description = type === 'U'
           ? `${N} pallet(s) en 1 nivel (${stackWord})`
           : `${N} pallet(s) x ${levels} nivel(es) apilado(s) (${stackWord})`;
+        options.push({
+          width, lengthDim, N, perSlot, levels, description,
+          slots, length, usedWidth,
+          columnWidths: new Array(N).fill(width),
+          columnLengths: new Array(N).fill(lengthDim),
+        });
+        continue;
+      }
+
+      // Mezcla real: se busca cómo repartir la cantidad entre el grupo de
+      // columnas A y el de B para minimizar el mayor de los dos largos.
+      let best = null;
+      for (let qA = 0; qA <= quantity; qA++) {
+        const qB = quantity - qA;
+        const slotsA = qA > 0 ? ceilDiv(qA, nA * levels) : 0;
+        const slotsB = qB > 0 ? ceilDiv(qB, nB * levels) : 0;
+        const length = Math.max(slotsA * lengthA, slotsB * lengthB);
+        if (!best || length < best.length - EPS) {
+          best = { qA, qB, slotsA, slotsB, length };
+        }
+      }
 
       options.push({
-        width: widthA, lengthDim, N, perSlot, levels, description,
-        slots, length, usedWidth, columnWidths, columnLengths,
+        width: widthA, lengthDim: Math.max(lengthA, lengthB), N, levels,
+        description: `${nA}+${nB} pallet(s) en columnas independientes (${nA}×${widthA.toFixed(2)} m + ` +
+          `${nB}×${widthB.toFixed(2)} m de ancho, cada una a su propio largo) x ${levels} nivel(es) (${stackWord})`,
+        slots: Math.max(best.slotsA, best.slotsB), length: best.length, usedWidth,
+        columnWidths: [...new Array(nA).fill(widthA), ...new Array(nB).fill(widthB)],
+        columnLengths: [...new Array(nA).fill(lengthA), ...new Array(nB).fill(lengthB)],
+        isSplitMixed: true,
+        groups: [
+          { count: nA, width: widthA, lengthDim: lengthA, qty: best.qA, slots: best.slotsA, depth: best.slotsA * lengthA, levels },
+          { count: nB, width: widthB, lengthDim: lengthB, qty: best.qB, slots: best.slotsB, depth: best.slotsB * lengthB, levels },
+        ],
       });
     }
   }

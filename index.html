@@ -669,7 +669,17 @@ function renderResults() {
         <div class="shared-hint">${roleText}: aprovecha la altura sobrante en vez de ir en tramos separados</div>`;
     } else {
       const shared = packResult.bins[placement.binIndex].items.length > 1;
-      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (${opt.N} a lo ancho, ${opt.description}, ${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m)</span>${
+      // Una disposición "en columnas independientes" no tiene un único
+      // número de filas: cada grupo de columnas (una orientación) tiene el
+      // suyo propio, así que se describen por separado en vez de mentir con
+      // un "N filas de X m" que no cuadraría con el largo real.
+      const rowsText = opt.isSplitMixed
+        ? opt.groups
+            .filter((g) => g.qty > 0)
+            .map((g) => `columna de ${fmt(g.width)} m: ${g.slots} fila(s) de ${fmt(g.lengthDim)} m (${fmt(g.depth)} m)`)
+            .join(' · ')
+        : `${opt.slots} fila(s) de ${fmt(opt.lengthDim)} m`;
+      cell.innerHTML = `<span class="detail-toggle"><b>${fmt(opt.length)} m</b> (${opt.N} a lo ancho, ${opt.description}, ${rowsText})</span>${
         shared ? '<div class="shared-hint">comparte hueco de ancho con otro artículo en el mismo tramo</div>' : ''
       }`;
     }

@@ -243,13 +243,101 @@ function drawFamilyPlacement(svg, placement, yStart, binLength, xOffset, colorBy
   svg.appendChild(group);
 }
 
+// Dibuja las columnas de UN grupo (misma orientación) de una disposición
+// mezclada en columnas independientes: sus propias filas, de su propio
+// largo, sin depender de lo que haga el otro grupo.
+function drawGroupColumns(group, yStart, grp, color, xOffset) {
+  let remaining = grp.qty;
+  const perSlot = grp.count * grp.levels;
+
+  for (let s = 0; s < grp.slots; s++) {
+    const slotY = yStart + s * grp.lengthDim;
+    const itemsInSlot = Math.min(perSlot, remaining);
+    remaining -= itemsInSlot;
+    const cols = distributeColumns(grp.count, grp.levels, itemsInSlot);
+
+    for (let c = 0; c < grp.count; c++) {
+      const x = xOffset + c * grp.width;
+      const filled = cols[c] > 0;
+      group.appendChild(el('rect', {
+        x, y: slotY, width: grp.width, height: grp.lengthDim,
+        class: filled ? 'pallet-cell' : 'pallet-cell empty',
+        fill: filled ? color : 'none',
+        'fill-opacity': filled ? (cols[c] / grp.levels) * 0.55 + 0.35 : 0,
+      }));
+      if (filled) {
+        labelCell(group, x, slotY, grp.width, grp.lengthDim);
+        if (grp.levels > 1) {
+          const label = el('text', {
+            x: x + grp.width / 2, y: slotY + grp.lengthDim / 2,
+            class: 'cell-badge', 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+          });
+          label.textContent = `×${cols[c]}`;
+          group.appendChild(label);
+        }
+      }
+    }
+
+    if (s > 0) {
+      group.appendChild(el('line', {
+        x1: xOffset, x2: xOffset + grp.count * grp.width, y1: slotY, y2: slotY, class: 'slot-divider',
+      }));
+    }
+  }
+}
+
+// Dibuja una disposición que reparte un mismo artículo en dos grupos de
+// columnas de orientación distinta, cada uno apilándose de forma
+// INDEPENDIENTE desde el principio del tramo (ver `enumerateRectOptions`,
+// `isSplitMixed`) — el grupo más corto deja un hueco sin usar hasta
+// alcanzar el largo del más profundo.
+function drawSplitMixedPlacement(svg, placement, yStart, binLength, xOffset, color) {
+  const group = el('g', {});
+  const opt = placement.option;
+  let x = xOffset;
+
+  opt.groups.forEach((grp) => {
+    if (grp.count === 0) return;
+    const groupWidth = grp.count * grp.width;
+    if (grp.qty > 0) {
+      drawGroupColumns(group, yStart, grp, color, x);
+      if (grp.depth < opt.length - DIAG_EPS) {
+        group.appendChild(el('rect', {
+          x, y: yStart + grp.depth, width: groupWidth, height: opt.length - grp.depth,
+          class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+        }));
+      }
+    } else {
+      group.appendChild(el('rect', {
+        x, y: yStart, width: groupWidth, height: opt.length, class: 'pallet-cell empty', fill: 'none', 'fill-opacity': 0,
+      }));
+    }
+    x += groupWidth;
+  });
+
+  if (opt.length < binLength - DIAG_EPS) {
+    group.appendChild(el('rect', {
+      x: xOffset, y: yStart + opt.length, width: opt.usedWidth, height: binLength - opt.length,
+      class: 'unused-width',
+    }));
+  }
+
+  svg.appendChild(group);
+}
+
 // Dibuja un artículo (una entrada de `bin.items`) dentro de su carril,
 // ocupando de `yStart` a `yStart + opt.length`; si el tramo (bin) es más
 // largo que lo que este artículo necesita, el resto del carril se marca
 // como hueco sin usar.
 function drawPlacement(svg, placement, yStart, binLength, xOffset, color) {
-  const group = el('g', {});
   const opt = placement.option;
+
+  if (opt.isSplitMixed) {
+    drawSplitMixedPlacement(svg, placement, yStart, binLength, xOffset, color);
+    return;
+  }
+
+  const group = el('g', {});
   let remaining = placement.quantity;
 
   for (let s = 0; s < opt.slots; s++) {

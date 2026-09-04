@@ -238,32 +238,35 @@ function approx(a, b, msg) {
 }
 
 // --- packArticles: para D/U, además de cada orientación por separado, se
-// prueba también MEZCLAR las dos orientaciones en la misma fila (un pallet
-// con el lado largo a lo ancho, otro con el corto) — esto nunca mejora el
-// resultado óptimo en solitario (matemáticamente, mezclar como mucho empata
-// con la mejor orientación pura), pero sí puede aportar una segunda opción
-// con los mismos metros que antes se perdía por no considerarla ---
+// prueba también MEZCLAR las dos orientaciones en el mismo tramo de ancho —
+// pero cada grupo de columnas (una orientación cada uno) se apila de forma
+// INDEPENDIENTE, con su propio número de filas, no una fila compartida de
+// largo uniforme (eso desperdiciaría la columna más corta). Repartir bien
+// la cantidad entre los dos grupos puede BATIR a la mejor orientación pura,
+// no solo empatar con ella. ---
 {
   // Camión del furgo de Iulian: 2,10 x 2,00 m. 6 pallets de 0,80 x 1,30 x
-  // 1,20 D: la mejor disposición pura es 2 columnas de 0,80 m (no caben 3
-  // columnas de 0,80 en 2,10 m) — pero 1 columna de 0,80 + 1 de 1,30 (que sí
-  // llena los 2,10 m exactos) da el mismo largo total, con otra forma.
+  // 1,20 D: la mejor disposición pura es 2 columnas de 0,80 m, 3 filas de
+  // 1,30 m = 3,90 m. Pero 1 columna de 0,80 m + 1 de 1,30 m (que sí llena
+  // los 2,10 m exactos), con 2 pallets en la columna de 0,80 m (2 filas de
+  // 1,30 m = 2,60 m) y 4 en la de 1,30 m (4 filas de 0,80 m = 3,20 m),
+  // funcionando cada una en paralelo desde el principio del tramo, solo
+  // necesita 3,20 m — menos que cualquier disposición pura.
   const furgo = { width: 2.1, height: 2.0 };
   const result = packArticles([{ id: 1, name: 'Solo', code: '080x130x120xD', quantity: 6 }], furgo);
-  approx(result.totalLength, 3.9, 'mejor disposición pura: 2 columnas de 0,80 m, 3 filas de 1,30 m');
-  assert.ok(result.alternative, 'debe existir una segunda disposición (mezclando orientaciones)');
-  approx(result.alternative.totalLength, 3.9, 'la disposición mezclada empata en metros con la pura');
-  const primaryWidths = result.bins[0].items[0].option.columnWidths.slice().sort();
-  const altWidths = result.alternative.bins[0].items[0].option.columnWidths.slice().sort();
-  assert.notDeepStrictEqual(primaryWidths, altWidths, 'la alternativa debe usar anchos de columna distintos (mezclados)');
+  approx(result.totalLength, 3.2, 'columnas independientes: máximo de 2,60 m y 3,20 m en paralelo');
+  const opt = result.bins[0].items[0].option;
+  assert.ok(opt.isSplitMixed, 'la disposición ganadora debe ser la mezcla en columnas independientes');
 
-  // Cada columna mezclada debe llevar SU PROPIO largo (el que le corresponde
-  // a su propia orientación), no el largo de la fila entera — una columna
-  // de 1,30 m de ancho mide 0,80 m de largo, no 1,30 (eso sería inventarse
-  // la medida y confundiría el dibujo).
-  const altOpt = result.alternative.bins[0].items[0].option;
-  const pairs = altOpt.columnWidths.map((w, i) => [w, altOpt.columnLengths[i]]).sort((a, b) => a[0] - b[0]);
+  // Cada columna mezclada debe llevar SU PROPIO ancho y largo (el que le
+  // corresponde a su propia orientación), no el largo de la fila entera —
+  // una columna de 1,30 m de ancho mide 0,80 m de largo, no 1,30 (eso sería
+  // inventarse la medida y confundiría el dibujo).
+  const pairs = opt.columnWidths.map((w, i) => [w, opt.columnLengths[i]]).sort((a, b) => a[0] - b[0]);
   assert.deepStrictEqual(pairs, [[0.8, 1.3], [1.3, 0.8]], 'cada columna mezclada lleva su propio largo, no el de la fila');
+
+  assert.ok(result.alternative, 'debe existir una segunda disposición distinta (aunque mida más)');
+  approx(result.alternative.totalLength, 3.9, 'la siguiente mejor disposición es la orientación pura (2 columnas de 0,80 m)');
 }
 
 // --- packArticles: un solo artículo SÍ puede tener una segunda disposición
@@ -374,6 +377,24 @@ function approx(a, b, msg) {
   const separate = computeLineResult(items[0].code, items[0].quantity, truck).best.length
     + computeLineResult(items[1].code, items[1].quantity, truck).best.length;
   assert.ok(result.totalLength <= separate + 1e-6, 'combinar (si se hace) nunca debe empeorar el resultado');
+}
+
+// --- Caso real reportado: 9 pallets U de 0,86 x 1,30 x 1,80 m en un camión
+// estándar (2,45 x 2,70 m). La orientación pura solo permite 2 columnas de
+// 0,86 m (3 no caben: 3x0,86=2,58 > 2,45), dando 5 filas de 1,30 m = 6,50 m.
+// Repartiendo la cantidad entre una columna de 0,86 m y otra de 1,30 m
+// (ambas caben: 0,86+1,30=2,16 ≤ 2,45), cada una funcionando en paralelo
+// desde el principio del tramo con su propio número de filas, el óptimo es
+// 3 pallets en la columna de 0,86 m (3 filas de 1,30 m = 3,90 m) y 6 en la
+// de 1,30 m (6 filas de 0,86 m = 5,16 m) — el máximo de los dos, 5,16 m, es
+// mucho mejor que 6,50 m (y ligeramente mejor que repartir 4+5, que da
+// 5,20 m: no cualquier reparto vale, hay que buscar el óptimo real). ---
+{
+  const truck = { width: 2.45, height: 2.70 };
+  const result = packArticles([{ id: 1, name: 'Solo', code: '086x130x180xU', quantity: 9 }], truck);
+  approx(result.totalLength, 5.16, 'reparto óptimo en columnas independientes: máximo de 3,90 m y 5,16 m');
+  const opt = result.bins[0].items[0].option;
+  assert.ok(opt.isSplitMixed, 'la disposición ganadora debe repartir la cantidad en columnas independientes');
 }
 
 console.log('Todos los tests pasaron correctamente.');
