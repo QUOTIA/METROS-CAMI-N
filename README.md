@@ -356,12 +356,18 @@ largo máximo:
   pero al no saber el límite de ese transportista no se puede decir si le
   cabe o no.
 
-La lista se ordena de mejor a peor candidato: primero los que caben (de
-menos a más metros necesarios), luego los de largo máximo desconocido, y
-por último los que no caben — así el primero de la lista es, casi siempre,
-la opción más ajustada al viaje. Se recalcula al vuelo tanto al cambiar el
-pedido como al editar cualquier dato de un transportista en el panel de
-ajustes.
+La lista se ordena de mejor a peor candidato: primero los que caben, luego
+los de largo máximo desconocido, y por último los que no caben. Entre los
+que caben, "mejor" NO es el que necesite menos metros en absoluto (eso
+apenas cambia entre transportistas con el mismo camión) sino el que MENOS
+hueco libre deje — un camión de 8,5 m que se llena con un pedido de 8 m es
+mejor opción que uno de 13 m que iría medio vacío, aunque el pedido
+"necesite" los mismos 8 m en los dos. Por eso se ordena por el hueco
+sobrante (largo máximo del transportista − metros que necesita el pedido con
+su camión), no por los metros en sí — así el primero de la lista es el que
+mejor aprovecha su camión para este viaje. Se recalcula al vuelo tanto al
+cambiar el pedido como al editar cualquier dato de un transportista en el
+panel de ajustes.
 
 ## Archivos
 

@@ -572,11 +572,18 @@ function parseCarrierMeters(value) {
 // necesarios pueden variar de un transportista a otro, ya que el ancho/alto
 // del camión cambia qué orientación y apilado son mejores (igual que pasa
 // entre el estándar y el furgo). Devuelve la lista ordenada de mejor a peor
-// candidato: primero los que cabe SE SABE que caben (largo máximo conocido y
-// suficiente), de menos a más metros necesarios; luego los de largo máximo
-// desconocido (no se puede asegurar que quepan, pero tampoco se sabe que
-// no); y por último los que no caben, para que el orden refleje
-// directamente cuál "cubre mejor" el viaje.
+// candidato: primero los que SE SABE que caben (largo máximo conocido y
+// suficiente); luego los de largo máximo desconocido (no se puede asegurar
+// que quepan, pero tampoco se sabe que no); y por último los que no caben.
+//
+// Entre los que caben, "mejor" NO es el que menos metros necesite en
+// absoluto (eso apenas varía entre transportistas con el mismo camión) sino
+// el que MENOS hueco libre deje — el camión de 8,5 m que se llena con un
+// pedido de 8 m es mejor opción que uno de 13 m que va medio vacío, aunque
+// el pedido "necesite" los mismos metros en los dos. Por eso se ordena por
+// el hueco sobrante (largo máximo − metros necesarios), no por los metros en
+// sí. Entre los que no caben, se ordena por lo poco que falte para caber,
+// como el "menos malo" de esa lista.
 function carrierRank(r) {
   if (r.error || (r.maxMeters !== null && !r.fits)) return 2; // no cabe
   if (r.maxMeters === null) return 1; // no se sabe
@@ -609,6 +616,22 @@ function evaluateCarriersForOrder(validItems) {
       const rankA = carrierRank(a);
       const rankB = carrierRank(b);
       if (rankA !== rankB) return rankA - rankB;
+
+      if (rankA === 0) {
+        // Cabe confirmado: mejor el que menos hueco libre deja (más se acerca
+        // a llenar su propio camión), no el que necesite menos metros.
+        const slackA = a.maxMeters - a.totalLength;
+        const slackB = b.maxMeters - b.totalLength;
+        return slackA - slackB;
+      }
+      if (rankA === 2) {
+        // No cabe: el que menos le falte para caber es el "menos malo".
+        const shortA = a.error || a.totalLength === null ? Infinity : a.totalLength - a.maxMeters;
+        const shortB = b.error || b.totalLength === null ? Infinity : b.totalLength - b.maxMeters;
+        return shortA - shortB;
+      }
+      // Largo máximo desconocido: no hay hueco que calcular, así que se
+      // ordena por metros necesarios como aproximación razonable.
       const lenA = a.totalLength === null ? Infinity : a.totalLength;
       const lenB = b.totalLength === null ? Infinity : b.totalLength;
       return lenA - lenB;
