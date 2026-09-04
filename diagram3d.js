@@ -527,6 +527,28 @@ if (typeof window !== 'undefined') {
     window.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
+    // El lienzo se dimensiona una vez al crearlo según el ancho del
+    // contenedor en ese momento — si el contenedor cambia de tamaño después
+    // (p. ej. al abrir el artifact a pantalla completa, o al redimensionar
+    // la ventana), sin esto el lienzo se queda con su tamaño de píxeles
+    // original, encajado en una esquina en vez de ocupar el nuevo ancho
+    // disponible. El SVG de la vista 2D no tiene este problema porque escala
+    // solo via CSS (viewBox), pero el canvas de Three.js necesita que se le
+    // avise explícitamente del nuevo tamaño.
+    function resizeToContainer() {
+      const newWidth = wrap.clientWidth || width;
+      const newHeight = Math.round(Math.min(720, Math.max(420, newWidth * 0.55)));
+      renderer.setSize(newWidth, newHeight);
+      camera.aspect = newWidth / newHeight;
+      camera.updateProjectionMatrix();
+    }
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => resizeToContainer());
+      resizeObserver.observe(wrap);
+    }
+    window.addEventListener('resize', resizeToContainer);
+
     let rafId = null;
     function animate() {
       rafId = requestAnimationFrame(animate);
@@ -541,6 +563,8 @@ if (typeof window !== 'undefined') {
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
         canvas.removeEventListener('wheel', onWheel);
+        window.removeEventListener('resize', resizeToContainer);
+        if (resizeObserver) resizeObserver.disconnect();
         renderer.dispose();
       },
     };
