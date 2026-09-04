@@ -204,6 +204,21 @@
   .diagram3d-hint { color: var(--muted); font-size: 0.72rem; text-align: center; margin: 6px 0 0; }
   .diagrams-row.mode-3d { flex-direction: column; }
   .diagrams-row.mode-3d .diagram-panel { flex: 1 1 auto; width: 100%; }
+
+  .carriers-match-panel { margin-top: 16px; }
+  .carrier-match-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .carrier-match {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+  }
+  .carrier-match.fit { border-color: #b7d4a8; background: #f3faf0; }
+  .carrier-match.no-fit { opacity: 0.7; }
+  .carrier-match-name { font-weight: 600; margin-right: 4px; }
+  .carrier-match-dims { color: var(--muted); font-size: 0.82rem; }
+  .carrier-match-status { font-size: 0.82rem; flex-basis: 100%; }
+  .carrier-match-status.fit { color: #2f7a3d; }
+  .carrier-match-status.no-fit { color: var(--danger); }
+  .carrier-match-status.unknown { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -276,6 +291,12 @@
 <div class="grand-total">
   <span>Total metros de largo</span>
   <span class="value" id="grandTotalValue">0,00 m</span>
+</div>
+
+<div class="panel carriers-match-panel">
+  <h2>Transportistas para este viaje</h2>
+  <p class="hint">Según el camión y el largo máximo de cada transportista (⚙), estos son los que mejor podrían cubrirlo — cada uno con SUS propias medidas, de más a menos ajustado.</p>
+  <div class="carrier-match-list" id="carrierMatches"></div>
 </div>
 
 <div class="diagrams-row">
@@ -408,14 +429,15 @@ function renderCarriers() {
       <td><button type="button" title="Eliminar">✕</button></td>
     `;
     const [nameInput, metersInput, widthInput, heightInput] = tr.querySelectorAll('input');
-    nameInput.addEventListener('input', (e) => { carrier.name = e.target.value; saveCarriers(); });
-    metersInput.addEventListener('input', (e) => { carrier.maxMeters = e.target.value; saveCarriers(); });
-    widthInput.addEventListener('input', (e) => { carrier.width = e.target.value; saveCarriers(); });
-    heightInput.addEventListener('input', (e) => { carrier.height = e.target.value; saveCarriers(); });
+    nameInput.addEventListener('input', (e) => { carrier.name = e.target.value; saveCarriers(); renderResults(); });
+    metersInput.addEventListener('input', (e) => { carrier.maxMeters = e.target.value; saveCarriers(); renderResults(); });
+    widthInput.addEventListener('input', (e) => { carrier.width = e.target.value; saveCarriers(); renderResults(); });
+    heightInput.addEventListener('input', (e) => { carrier.height = e.target.value; saveCarriers(); renderResults(); });
     tr.querySelector('button').addEventListener('click', () => {
       carriers = carriers.filter((c) => c.id !== carrier.id);
       saveCarriers();
       renderCarriers();
+      renderResults();
     });
     tbody.appendChild(tr);
   });
@@ -533,6 +555,104 @@ function decideTruck(candidateItems) {
   }
 
   return { preset: furgo, furgoLength: furgoAttempt.result.totalLength, furgoError: null };
+}
+
+// Convierte un campo de transportista ("2,10", "4.2", vacío...) a metros, o
+// null si no se ha rellenado — a diferencia de `toMeters` (calc.js), aquí NO
+// se asume que un valor pequeño esté en centímetros: el ancho/alto/largo de
+// un camión siempre se escribe ya en metros.
+function parseCarrierMeters(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const num = parseFloat(String(value).replace(',', '.'));
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+// Para el pedido actual, evalúa CADA transportista dado de alta con SU
+// PROPIO camión (ancho/alto en blanco = estándar 2,45 x 2,70 m) — los metros
+// necesarios pueden variar de un transportista a otro, ya que el ancho/alto
+// del camión cambia qué orientación y apilado son mejores (igual que pasa
+// entre el estándar y el furgo). Devuelve la lista ordenada de mejor a peor
+// candidato: primero los que cabe SE SABE que caben (largo máximo conocido y
+// suficiente), de menos a más metros necesarios; luego los de largo máximo
+// desconocido (no se puede asegurar que quepan, pero tampoco se sabe que
+// no); y por último los que no caben, para que el orden refleje
+// directamente cuál "cubre mejor" el viaje.
+function carrierRank(r) {
+  if (r.error || (r.maxMeters !== null && !r.fits)) return 2; // no cabe
+  if (r.maxMeters === null) return 1; // no se sabe
+  return 0; // cabe, confirmado
+}
+
+function evaluateCarriersForOrder(validItems) {
+  if (validItems.length === 0) return [];
+  return carriers
+    .filter((c) => c.name && c.name.trim())
+    .map((carrier) => {
+      const width = parseCarrierMeters(carrier.width) || 2.45;
+      const height = parseCarrierMeters(carrier.height) || 2.70;
+      const maxMeters = parseCarrierMeters(carrier.maxMeters);
+      const truck = { width, height };
+
+      let totalLength = null;
+      let error = null;
+      try {
+        validItems.forEach((item) => window.PalletCalc.computeLineResult(item.code, item.quantity, truck));
+        totalLength = window.PalletCalc.packArticles(validItems, truck).totalLength;
+      } catch (err) {
+        error = err.message;
+      }
+
+      const fits = !error && (maxMeters === null || totalLength <= maxMeters + 0.005);
+      return { carrier, width, height, maxMeters, totalLength, error, fits };
+    })
+    .sort((a, b) => {
+      const rankA = carrierRank(a);
+      const rankB = carrierRank(b);
+      if (rankA !== rankB) return rankA - rankB;
+      const lenA = a.totalLength === null ? Infinity : a.totalLength;
+      const lenB = b.totalLength === null ? Infinity : b.totalLength;
+      return lenA - lenB;
+    });
+}
+
+function renderCarrierMatches(validItems) {
+  const host = document.getElementById('carrierMatches');
+  if (validItems.length === 0) {
+    host.innerHTML = '<p class="hint" style="margin:0;">Añade artículos válidos para ver qué transportistas podrían cubrir el viaje.</p>';
+    return;
+  }
+
+  const results = evaluateCarriersForOrder(validItems);
+  if (results.length === 0) {
+    host.innerHTML = '<p class="hint" style="margin:0;">Da de alta transportistas en ⚙ para verlos aquí.</p>';
+    return;
+  }
+
+  host.innerHTML = results.map((r) => {
+    const dimsText = `${fmt(r.width)} x ${fmt(r.height)} m` + (r.maxMeters !== null ? ` · máx. ${fmt(r.maxMeters)} m` : ' · sin largo máximo definido');
+
+    let statusClass;
+    let statusText;
+    if (r.error) {
+      statusClass = 'no-fit';
+      statusText = `✕ No caben los pallets con su camión: ${r.error}`;
+    } else if (r.maxMeters === null) {
+      statusClass = 'unknown';
+      statusText = `Necesitaría ${fmt(r.totalLength)} m — este transportista no tiene largo máximo guardado, así que no se sabe si le cabe.`;
+    } else if (r.fits) {
+      statusClass = 'fit';
+      statusText = `✓ Cabe — usa ${fmt(r.totalLength)} m de los ${fmt(r.maxMeters)} m que tiene (sobran ${fmt(r.maxMeters - r.totalLength)} m).`;
+    } else {
+      statusClass = 'no-fit';
+      statusText = `✕ No cabe — harían falta ${fmt(r.totalLength)} m y solo tiene ${fmt(r.maxMeters)} m.`;
+    }
+
+    return `<div class="carrier-match ${statusClass === 'fit' ? 'fit' : 'no-fit'}">
+      <span class="carrier-match-name">${escapeHtml(r.carrier.name)}</span>
+      <span class="carrier-match-dims">${dimsText}</span>
+      <span class="carrier-match-status ${statusClass}">${statusText}</span>
+    </div>`;
+  }).join('');
 }
 
 function updateTruckDecisionDisplay(decision, totalLength) {
@@ -729,6 +849,7 @@ function renderResults() {
   const totalLength = packResult ? packResult.totalLength : 0;
   document.getElementById('grandTotalValue').textContent = `${fmt(totalLength)} m`;
   updateTruckDecisionDisplay(decision, totalLength);
+  renderCarrierMatches(validItems);
 
   const orderedIds = validItems.map((item) => item.id);
   lastPackResult = packResult;

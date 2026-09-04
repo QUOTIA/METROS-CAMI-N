@@ -323,7 +323,7 @@ pallet — no
 depende del DOM ni de Three.js, así que se puede probar con Node igual que
 `distributeColumns` (`diagram3d.test.js`).
 
-## Transportistas (en preparación)
+## Transportistas
 
 La ruedita ⚙ junto al título abre un panel de ajustes, oculto del flujo
 normal, con la lista de transportistas: nombre, largo máximo de su camión y,
@@ -333,10 +333,35 @@ Se guarda en el navegador (`localStorage`), no en el pedido. Incluye de
 partida a los 8 transportistas ya dados de alta; Iulian tiene un camión más
 pequeño (el "furgo": 4,20 x 2,10 x 2,00 m), que es justo el que la app usa
 para decidir automáticamente entre estándar y furgo en el panel "Camión"
-(ver más arriba). De momento este panel de transportistas solo sirve para
-mantener esos datos; todavía no se usa para nada más en el cálculo — la idea
-es, más adelante, extender la misma decisión automática a todos los
-transportistas dados de alta, no solo al estándar y al furgo.
+(ver más arriba).
+
+### Transportistas para este viaje
+
+Debajo del total de metros, la app muestra qué transportistas de la lista
+podrían cubrir el pedido actual — cada uno evaluado con SU PROPIO camión
+(`evaluateCarriersForOrder` en index.html), no con el camión estándar/furgo
+ya decidido arriba: el ancho y el alto cambian qué orientación y apilado son
+mejores, así que los metros necesarios pueden variar de un transportista a
+otro (igual que ya pasaba entre el estándar y el furgo).
+
+Para cada transportista se calcula el pedido completo con su ancho/alto (o
+el estándar, si los dejó en blanco) y se compara el resultado contra su
+largo máximo:
+
+- **Cabe** (fondo/borde resaltado): usa menos metros que su largo máximo —
+  se indica cuántos metros sobran.
+- **No cabe**: harían falta más metros de los que tiene, o directamente
+  algún pallet no entra por ancho o alto con su camión.
+- **Sin largo máximo definido**: se muestran los metros que necesitaría,
+  pero al no saber el límite de ese transportista no se puede decir si le
+  cabe o no.
+
+La lista se ordena de mejor a peor candidato: primero los que caben (de
+menos a más metros necesarios), luego los de largo máximo desconocido, y
+por último los que no caben — así el primero de la lista es, casi siempre,
+la opción más ajustada al viaje. Se recalcula al vuelo tanto al cambiar el
+pedido como al editar cualquier dato de un transportista en el panel de
+ajustes.
 
 ## Archivos
 
