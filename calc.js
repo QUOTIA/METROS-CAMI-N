@@ -85,12 +85,10 @@ function stackingForOrientation({ height, type }, N, truckHeight) {
   };
 }
 
-// Enumera, para cada orientación posible del pallet, TODAS las opciones de
-// cuántas columnas (N) usar a lo ancho del camión (de 1 hasta el máximo que
-// cabe). Usar menos columnas que el máximo genera más metros de largo para
-// este artículo, pero libera ancho para que otro artículo pueda colocarse
-// al lado (ver `packArticles`).
-function enumerateOptions(pallet, quantity, truck) {
+// Enumera opciones de pirámide (P): una única orientación por fila, ya que
+// la base necesita columnas del mismo ancho para poder encajar la fila de
+// arriba encima.
+function enumeratePyramidOptions(pallet, quantity, truck) {
   const { dimA, dimB } = pallet;
   const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
 
@@ -109,6 +107,66 @@ function enumerateOptions(pallet, quantity, truck) {
     }
   }
   return options;
+}
+
+// Enumera opciones para U y D: cada columna aporta lo mismo sea cual sea su
+// orientación (el número de niveles depende solo de la altura del pallet,
+// no de qué lado quede a lo ancho), así que además de cada orientación por
+// separado se prueban las DOS MEZCLADAS en la misma fila — por ejemplo, un
+// pallet con el lado largo a lo ancho y otro con el corto, si entre los dos
+// aprovechan el ancho del camión mejor que usando una sola orientación para
+// todos (p. ej. 1,30 + 0,80 = 2,10 encaja donde 2×0,80 = 1,60 desperdicia
+// medio metro de ancho sin poder meter una tercera columna de 0,80).
+function enumerateRectOptions(pallet, quantity, truck) {
+  const { dimA, dimB, type, height } = pallet;
+  const orientations = dimA === dimB ? [[dimA, dimB]] : [[dimA, dimB], [dimB, dimA]];
+  const levels = type === 'U' ? 1 : Math.max(1, floorDiv(truck.height, height));
+  const stackWord = type === 'U' ? 'U: no remontable' : 'D: remontable';
+
+  const [widthA, lengthA] = orientations[0];
+  const hasSecond = orientations.length === 2;
+  const [widthB, lengthB] = hasSecond ? orientations[1] : [0, 0];
+  const maxA = floorDiv(truck.width, widthA);
+
+  const options = [];
+  for (let nA = 0; nA <= maxA; nA++) {
+    const usedByA = nA * widthA;
+    const maxB = hasSecond ? floorDiv(truck.width - usedByA, widthB) : 0;
+    for (let nB = 0; nB <= maxB; nB++) {
+      const N = nA + nB;
+      if (N < 1) continue;
+
+      const perSlot = N * levels;
+      const lengthDim = Math.max(nA > 0 ? lengthA : 0, nB > 0 ? lengthB : 0);
+      const slots = ceilDiv(quantity, perSlot);
+      const length = slots * lengthDim;
+      const usedWidth = usedByA + nB * widthB;
+      const columnWidths = [...new Array(nA).fill(widthA), ...new Array(nB).fill(widthB)];
+      const description = nB > 0
+        ? `${nA}+${nB} pallet(s) combinados (${nA}×${widthA.toFixed(2)} m + ${nB}×${widthB.toFixed(2)} m de ancho) x ${levels} nivel(es) (${stackWord})`
+        : type === 'U'
+          ? `${N} pallet(s) en 1 nivel (${stackWord})`
+          : `${N} pallet(s) x ${levels} nivel(es) apilado(s) (${stackWord})`;
+
+      options.push({
+        width: widthA, lengthDim, N, perSlot, levels, description,
+        slots, length, usedWidth, columnWidths,
+      });
+    }
+  }
+  return options;
+}
+
+// Enumera TODAS las opciones de colocación de un pallet: para U y D, todas
+// las combinaciones de columnas (incluyendo mezclar orientaciones en la
+// misma fila); para P, cada orientación por separado (ver arriba). Usar
+// menos columnas que el máximo genera más metros de largo para este
+// artículo solo, pero libera ancho para que otro artículo pueda colocarse
+// al lado (ver `packArticles`).
+function enumerateOptions(pallet, quantity, truck) {
+  return pallet.type === 'P'
+    ? enumeratePyramidOptions(pallet, quantity, truck)
+    : enumerateRectOptions(pallet, quantity, truck);
 }
 
 // Un pallet más alto que el alto útil del camión no cabe de ninguna forma,
@@ -240,6 +298,15 @@ function packFootprintFamily(articles, truck) {
   return best;
 }
 
+// Identifica la forma real de una opción (qué anchos de columna usa, no solo
+// `width`, que para una opción mezclada es solo la primera orientación) —
+// necesario para no confundir "2 columnas de 0,80" con "1 de 1,30 + 1 de
+// 0,80" cuando ambas tienen el mismo N y el mismo largo de fila.
+function optionShapeKey(opt) {
+  const widths = opt.columnWidths ? opt.columnWidths.slice().sort((a, b) => a - b) : [opt.width];
+  return widths.map((w) => w.toFixed(6)).join(',');
+}
+
 // Firma de una combinación concreta de opciones (orientación + columnas por
 // artículo del grupo), para distinguir dos disposiciones que casualmente
 // midan lo mismo (p. ej. 2 columnas de 0,80 m de largo y 6 filas frente a 3
@@ -249,7 +316,7 @@ function comboSignature(indices, combo) {
   return indices
     .map((idx, k) => {
       const opt = combo[k];
-      return `${idx}:${opt.width.toFixed(6)}x${opt.lengthDim.toFixed(6)}xN${opt.N}`;
+      return `${idx}:${optionShapeKey(opt)}x${opt.lengthDim.toFixed(6)}xN${opt.N}`;
     })
     .join('|');
 }
@@ -420,7 +487,7 @@ function placementSignature(item) {
   const opt = item.option;
   const shape = item.isFamily
     ? `F,rows${opt.rows},N${opt.N},${opt.width.toFixed(4)}x${opt.lengthDim.toFixed(4)}`
-    : `N${opt.N},slots${opt.slots},${opt.width.toFixed(4)}x${opt.lengthDim.toFixed(4)}`;
+    : `N${opt.N},slots${opt.slots},${optionShapeKey(opt)}x${opt.lengthDim.toFixed(4)}`;
   return `${ids.slice().sort((a, b) => a - b).join(',')}:${shape}`;
 }
 

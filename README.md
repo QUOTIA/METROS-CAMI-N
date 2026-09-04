@@ -100,6 +100,19 @@ Para cada medida + cantidad del pedido:
    fila da un resultado mejor si la fila resultante es más profunda (aprovecha
    mejor los "huecos" de la última fila incompleta).
 
+Para U y D, además de probar cada orientación por separado, también se
+prueba MEZCLAR las dos orientaciones en la misma fila — por ejemplo, un
+pallet con el lado largo a lo ancho y otro (del mismo artículo) con el lado
+corto, si entre los dos aprovechan el ancho del camión mejor que usando una
+sola orientación para todos (p. ej. 1,30 + 0,80 = 2,10 m encaja exacto donde
+2×0,80 = 1,60 m deja medio metro suelto sin poder meter una tercera columna
+igual). Mezclar nunca reduce el largo por debajo de la mejor orientación
+pura, pero sí puede ofrecer una disposición distinta que empata en metros —
+así, cuando existe, aparece como la "segunda opción de colocación" en vez de
+perderse frente a una alternativa peor. (Los pallets de tipo P no mezclan
+orientación: la base de la pirámide necesita columnas del mismo ancho para
+que la fila de arriba encaje.)
+
 ## Cómo se combinan varios artículos en el mismo tramo
 
 Si dos (o tres) artículos caben juntos a lo ancho del camión —aunque sea

@@ -220,17 +220,42 @@ function approx(a, b, msg) {
   const result = packArticles(items, truck);
   approx(result.totalLength, 4.45, 'mejor combinación: A+B juntos, C solo');
   assert.ok(result.alternative, 'debe existir una segunda opción de colocación');
-  approx(result.alternative.totalLength, 4.50, 'segunda mejor combinación (más metros)');
   assert.ok(
     result.alternative.totalLength >= result.totalLength - 1e-6,
     'la alternativa nunca debe medir menos que la mejor opción'
   );
-  // Han de ser particiones realmente distintas, no la misma repetida.
+  // Puede agrupar los mismos artículos en el mismo tramo y aun así ser una
+  // disposición físicamente distinta (p. ej. el artículo C usando columnas
+  // de dos anchos distintos en vez de dos columnas iguales) — la
+  // comparación debe fijarse en la forma real, no solo en qué ids comparten
+  // tramo.
+  const shapeOf = (sol) => JSON.stringify(sol.bins.map((b) => b.items.map((i) => i.option.columnWidths || i.option.width)));
   assert.notStrictEqual(
-    JSON.stringify(result.bins.map((b) => b.items.map((i) => i.id).sort())),
-    JSON.stringify(result.alternative.bins.map((b) => b.items.map((i) => i.id).sort())),
-    'la alternativa debe ser una agrupación distinta a la principal'
+    shapeOf(result),
+    shapeOf(result.alternative),
+    'la alternativa debe ser una disposición físicamente distinta'
   );
+}
+
+// --- packArticles: para D/U, además de cada orientación por separado, se
+// prueba también MEZCLAR las dos orientaciones en la misma fila (un pallet
+// con el lado largo a lo ancho, otro con el corto) — esto nunca mejora el
+// resultado óptimo en solitario (matemáticamente, mezclar como mucho empata
+// con la mejor orientación pura), pero sí puede aportar una segunda opción
+// con los mismos metros que antes se perdía por no considerarla ---
+{
+  // Camión del furgo de Iulian: 2,10 x 2,00 m. 6 pallets de 0,80 x 1,30 x
+  // 1,20 D: la mejor disposición pura es 2 columnas de 0,80 m (no caben 3
+  // columnas de 0,80 en 2,10 m) — pero 1 columna de 0,80 + 1 de 1,30 (que sí
+  // llena los 2,10 m exactos) da el mismo largo total, con otra forma.
+  const furgo = { width: 2.1, height: 2.0 };
+  const result = packArticles([{ id: 1, name: 'Solo', code: '080x130x120xD', quantity: 6 }], furgo);
+  approx(result.totalLength, 3.9, 'mejor disposición pura: 2 columnas de 0,80 m, 3 filas de 1,30 m');
+  assert.ok(result.alternative, 'debe existir una segunda disposición (mezclando orientaciones)');
+  approx(result.alternative.totalLength, 3.9, 'la disposición mezclada empata en metros con la pura');
+  const primaryWidths = result.bins[0].items[0].option.columnWidths.slice().sort();
+  const altWidths = result.alternative.bins[0].items[0].option.columnWidths.slice().sort();
+  assert.notDeepStrictEqual(primaryWidths, altWidths, 'la alternativa debe usar anchos de columna distintos (mezclados)');
 }
 
 // --- packArticles: un solo artículo SÍ puede tener una segunda disposición

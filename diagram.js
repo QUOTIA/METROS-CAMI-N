@@ -61,13 +61,17 @@ function labelCell(group, x, y, width, lengthDim) {
 // xOffset: posición a lo ancho (horizontal) donde empieza el carril de este artículo.
 function drawGridSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
   const { N, width, lengthDim, levels } = opt;
+  // Cada columna puede tener su propio ancho si el pallet se mezcla en dos
+  // orientaciones distintas en la misma fila (ver `enumerateRectOptions`).
+  const columnWidths = opt.columnWidths || new Array(N).fill(width);
   const cols = distributeColumns(N, levels, itemsInSlot);
 
+  let x = xOffset;
   for (let c = 0; c < N; c++) {
-    const x = xOffset + c * width;
+    const colWidth = columnWidths[c];
     const filled = cols[c] > 0;
     const rect = el('rect', {
-      x, y: slotY, width, height: lengthDim,
+      x, y: slotY, width: colWidth, height: lengthDim,
       class: filled ? 'pallet-cell' : 'pallet-cell empty',
       fill: filled ? color : 'none',
       'fill-opacity': filled ? (cols[c] / levels) * 0.55 + 0.35 : 0,
@@ -75,10 +79,10 @@ function drawGridSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
     group.appendChild(rect);
 
     if (filled) {
-      labelCell(group, x, slotY, width, lengthDim);
+      labelCell(group, x, slotY, colWidth, lengthDim);
       if (levels > 1) {
         const label = el('text', {
-          x: x + width / 2,
+          x: x + colWidth / 2,
           y: slotY + lengthDim / 2,
           class: 'cell-badge',
           'text-anchor': 'middle',
@@ -88,6 +92,7 @@ function drawGridSlot(group, slotY, opt, itemsInSlot, color, xOffset) {
         group.appendChild(label);
       }
     }
+    x += colWidth;
   }
 }
 
