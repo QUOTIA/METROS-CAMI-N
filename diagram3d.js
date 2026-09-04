@@ -387,8 +387,12 @@ if (typeof window !== 'undefined') {
     wrap.className = 'diagram3d-wrap';
     container.appendChild(wrap);
 
-    const width = wrap.clientWidth || 420;
-    const height = 440;
+    // El panel ahora ocupa todo el ancho de la fila en vez de compartirlo con
+    // el panel de al lado (ver index.html, `.diagrams-row.mode-3d`), así que
+    // el alto del lienzo escala con ese ancho en vez de ser un valor fijo —
+    // si no, el modelo se ve diminuto en pantallas anchas.
+    const width = wrap.clientWidth || 800;
+    const height = Math.round(Math.min(720, Math.max(420, width * 0.55)));
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xfbfbfc);

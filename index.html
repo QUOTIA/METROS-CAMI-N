@@ -199,9 +199,11 @@
     background: #fff; color: var(--muted); cursor: pointer;
   }
   .view-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .diagram3d-wrap { max-width: 420px; margin: 0 auto; border-radius: 4px; overflow: hidden; }
+  .diagram3d-wrap { width: 100%; margin: 0 auto; border-radius: 4px; overflow: hidden; }
   .diagram3d-wrap canvas { display: block; width: 100%; height: auto; }
   .diagram3d-hint { color: var(--muted); font-size: 0.72rem; text-align: center; margin: 6px 0 0; }
+  .diagrams-row.mode-3d { flex-direction: column; }
+  .diagrams-row.mode-3d .diagram-panel { flex: 1 1 auto; width: 100%; }
 </style>
 </head>
 <body>
@@ -768,6 +770,9 @@ const DIAGRAM_HINTS = {
 function renderDiagrams() {
   const renderFn = diagramViewMode === '3d' ? window.render3DView : window.renderTruckDiagram;
   document.getElementById('diagramHint').textContent = DIAGRAM_HINTS[diagramViewMode];
+  // En 3D, los paneles se apilan a todo el ancho en vez de ir lado a lado —
+  // el modelo se ve muy pequeño si se le deja solo la mitad del ancho.
+  document.querySelector('.diagrams-row').classList.toggle('mode-3d', diagramViewMode === '3d');
   renderFn(document.getElementById('diagramHost'), lastPackResult, lastTruck, lastOrderedIds);
   if (!document.getElementById('altPanel').hidden) {
     renderFn(document.getElementById('diagramHostAlt'), lastAlt, lastTruck, lastOrderedIds);
